@@ -397,8 +397,8 @@ void MakeMeterEditor::timerCallback()
             const auto cc = THEMES[themeIndex].core;
             vf.colP[0] = pc.getFloatRed(); vf.colP[1] = pc.getFloatGreen(); vf.colP[2] = pc.getFloatBlue();
             vf.colC[0] = cc.getFloatRed(); vf.colC[1] = cc.getFloatGreen(); vf.colC[2] = cc.getFloatBlue();
-            vf.bg[0]   = pc.getFloatRed() * 0.05f; vf.bg[1] = pc.getFloatGreen() * 0.05f;
-            vf.bg[2]   = pc.getFloatBlue() * 0.06f + 0.02f;
+            vf.bg[0]   = pc.getFloatRed() * 0.02f; vf.bg[1] = pc.getFloatGreen() * 0.025f;
+            vf.bg[2]   = pc.getFloatBlue() * 0.03f + 0.008f;   // near-black, faint theme tint
             glViz->pushFrame (vf);
         }
     }

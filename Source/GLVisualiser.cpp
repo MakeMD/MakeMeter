@@ -176,17 +176,21 @@ void GLVisualiser::respawn (int i, const VizFrame& f)
     p.ilife = 1.0f / juce::jmax (0.4f, life);
     p.energy = 0.0f;
 
-    if (mode == 0) // Orb: emit on the live goniometer Lissajous, burst outward + swirl
+    if (mode == 0) // Orb: a fixed point on a unit sphere (rotated + projected each frame)
     {
-        const int k = rng.nextInt (LoudnessMeter::goniN);
-        const float gx = proc.meter.goniX[(size_t) k].load (std::memory_order_relaxed) / 1.41421356f;
-        const float gy = proc.meter.goniY[(size_t) k].load (std::memory_order_relaxed) / 1.41421356f;
-        p.x = gx + (rng.nextFloat() - 0.5f) * 0.03f;
-        p.y = gy + (rng.nextFloat() - 0.5f) * 0.03f;
-        const float ang = rng.nextFloat() * kTwoPi;
-        const float sp  = 0.12f + rng.nextFloat() * 0.16f;
-        p.vx = std::cos (ang) * sp;
-        p.vy = std::sin (ang) * sp;
+        const float u = rng.nextFloat(), v = rng.nextFloat();
+        const float z = 2.0f * u - 1.0f;
+        const float rr = std::sqrt (juce::jmax (0.0f, 1.0f - z * z));
+        const float th = kTwoPi * v;
+        // ~6% sit further out as sparse "dust" in the void around the sphere
+        const float mag = (rng.nextFloat() < 0.06f) ? (1.35f + rng.nextFloat() * 0.7f) : 1.0f;
+        p.sx = rr * std::cos (th) * mag;
+        p.sy = rr * std::sin (th) * mag;
+        p.sz = z * mag;
+        p.x = p.sx; p.y = p.sy; p.vx = p.vy = 0.0f;
+        // long, staggered life so the sphere is stable and respawns never blink in sync
+        p.life  = 0.2f + rng.nextFloat() * 0.8f;
+        p.ilife = 1.0f / 40.0f;
     }
     else if (mode == 1) // Ring: on the band's circle (seed fills the angle continuously between bands)
     {
@@ -228,8 +232,21 @@ void GLVisualiser::updateParticles (float dt, const VizFrame& f)
         const float bandE   = std::pow (juce::jlimit (0.0f, 1.0f, f.scope[p.band]), 0.6f);
         const float targetE = juce::jlimit (0.0f, 1.0f, 0.12f + 0.25f * rmsN + 0.8f * bandE);
         p.energy += (targetE - p.energy) * juce::jmin (1.0f, dt * 6.0f);
+        p.disp = p.energy;   // default display value (drives size + brightness); Orb folds in depth
 
-        if (mode == 2) // Helix: analytic travelling double-helix (overwrite position)
+        if (mode == 0) // Orb: rotate the sphere base around Y, project, shade by depth
+        {
+            const float yaw = t * (0.18f + rmsN * 0.5f);
+            const float cs = std::cos (yaw), sn = std::sin (yaw);
+            const float rx = p.sx * cs + p.sz * sn;
+            const float rz = -p.sx * sn + p.sz * cs;
+            const float rad = 1.0f + p.energy * 0.22f;              // spectrum-reactive radial push
+            p.x = rx * rad;
+            p.y = p.sy * rad;
+            const float depth = 0.4f + 0.6f * (rz * 0.5f + 0.5f);  // back .. front
+            p.disp = juce::jlimit (0.0f, 1.0f, (0.5f + p.energy) * depth);
+        }
+        else if (mode == 2) // Helix: analytic travelling double-helix (overwrite position)
         {
             // ponytail: Helix rides an analytic curve, it is not force-integrated.
             const float ribbon = (float) (p.band & 1);
@@ -239,18 +256,13 @@ void GLVisualiser::updateParticles (float dt, const VizFrame& f)
             p.x = (u - 0.5f) * 1.7f;
             p.y = std::sin (u * kTwoPi * 3.0f + ribbon * 3.14159f + scroll * kTwoPi) * amp;
         }
-        else
+        else // Ring / Nebula: force-integrated
         {
-            const float damp = (mode == 0 ? 0.72f : mode == 1 ? 0.80f : 0.90f);
+            const float damp = (mode == 1 ? 0.80f : 0.90f);
             const float d = std::pow (damp, dt);
             p.vx *= d; p.vy *= d;
 
-            if (mode == 0) // Orb: centre gravity + orbital swirl
-            {
-                p.vx += -p.x * 1.2f * dt - p.y * 0.8f * dt;
-                p.vy += -p.y * 1.2f * dt + p.x * 0.8f * dt;
-            }
-            else if (mode == 1) // Ring: spring to r(band) at a rotating angle
+            if (mode == 1) // Ring: spring to r(band) at a rotating angle
             {
                 const float ang = kTwoPi * ((float) p.band + p.seed) / 200.0f + t * 0.6f * (0.5f + rmsN);
                 const float rT  = 0.28f + 0.55f * std::pow (juce::jlimit (0.0f, 1.0f, f.scope[p.band]), 0.6f);
@@ -346,18 +358,19 @@ void GLVisualiser::renderOpenGL()
     updateParticles (dt, f);
 
     const int   P      = kParticleCount;
-    const float basePx = (f.mode == 0 ? 12.0f : f.mode == 1 ? 8.0f : f.mode == 2 ? 7.0f : 11.0f);
+    const float basePx = (f.mode == 0 ? 6.0f : f.mode == 1 ? 8.0f : f.mode == 2 ? 7.0f : 11.0f);
     verts.resize ((size_t) P * 4);
     for (int i = 0; i < P; ++i)
     {
         const auto& p = pool[(size_t) i];
         const float age  = 1.0f - p.life;
-        const float fade = juce::jmin (juce::jlimit (0.0f, 1.0f, age / 0.15f),
+        const float fade = (f.mode == 0) ? 1.0f    // Orb sphere is stable — no life-fade twinkle
+                         : juce::jmin (juce::jlimit (0.0f, 1.0f, age / 0.15f),
                                        juce::jlimit (0.0f, 1.0f, p.life / 0.30f));
         verts[(size_t) i * 4 + 0] = p.x;
         verts[(size_t) i * 4 + 1] = p.y;
-        verts[(size_t) i * 4 + 2] = p.energy * fade;
-        verts[(size_t) i * 4 + 3] = basePx * (0.5f + p.energy);
+        verts[(size_t) i * 4 + 2] = p.disp * fade;
+        verts[(size_t) i * 4 + 3] = basePx * (0.4f + p.disp);
     }
 
     // ---- Pass 1: particles -> sceneFbo (pure light on black) ----
@@ -437,8 +450,8 @@ void GLVisualiser::renderOpenGL()
     compositeProg->setUniform ("uScene", (GLint) 0);
     glActiveTexture (GL_TEXTURE1); glBindTexture (GL_TEXTURE_2D, bloomFbo0.getTextureID());
     compositeProg->setUniform ("uBloom", (GLint) 1);
-    compositeProg->setUniform ("uBloomIntensity", 1.25f);
-    compositeProg->setUniform ("uExposure", 0.80f);   // less blow-out -> theme hue survives; bloom carries the glow
+    compositeProg->setUniform ("uBloomIntensity", 1.0f);
+    compositeProg->setUniform ("uExposure", 0.90f);   // crisp dots + subtle glow (не серпанок)
     compositeProg->setUniform ("uBg", f.bg[0], f.bg[1], f.bg[2]);
     drawFullscreen();
     glActiveTexture (GL_TEXTURE0);
