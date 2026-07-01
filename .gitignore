@@ -1,0 +1,19 @@
+# Build output
+/build/
+cmake-build-*/
+CMakeCache.txt
+CMakeFiles/
+
+# IDE / editor
+.vs/
+.idea/
+*.user
+*.suo
+
+# OS
+Thumbs.db
+.DS_Store
+
+# Internal planning notes — not part of the public project
+PLAN.md
+ROADMAP.md
