@@ -177,16 +177,15 @@ void GLVisualiser::respawn (int i, const VizFrame& f)
     p.life  = 0.2f + rng.nextFloat() * 0.8f;
     p.ilife = 1.0f / 40.0f;
 
-    if (mode == 0) // Orb: point on a unit sphere (+ ~6% sparse outer dust)
+    if (mode == 0) // Orb: a unit direction; the radius is computed per frame (dense reactive cloud)
     {
         const float u = rng.nextFloat(), v = rng.nextFloat();
         const float z = 2.0f * u - 1.0f;
         const float rr = std::sqrt (juce::jmax (0.0f, 1.0f - z * z));
         const float th = kTwoPi * v;
-        const float mag = (rng.nextFloat() < 0.06f) ? (1.35f + rng.nextFloat() * 0.7f) : 1.0f;
-        p.sx = rr * std::cos (th) * mag;
-        p.sy = rr * std::sin (th) * mag;
-        p.sz = z * mag;
+        p.sx = rr * std::cos (th);
+        p.sy = rr * std::sin (th);
+        p.sz = z;
     }
     else if (mode == 1) // Ring: a thin tilted torus, spun around Y each frame
     {
@@ -277,11 +276,16 @@ void GLVisualiser::updateParticles (float dt, const VizFrame& f)
                 py3 = (u - 0.5f) * 2.0f * H + (fracf (p.seed * 29.3f) - 0.5f) * tubeR;
             }
         }
-        else
+        else if (mode == 0)   // Orb: small dense cloud that pulses with loudness and scatters on hits
         {
-            const float rad = (mode == 0) ? (1.0f + p.energy * 0.22f)    // Orb: breathe
-                            : (mode == 1) ? (1.0f + p.energy * 0.30f)    // Ring: pulse
-                                          : (1.0f + p.energy * 0.12f);   // Nebula
+            const float pulse = 0.5f + rmsN * 0.9f;                       // whole cloud grows when loud
+            const float r0 = std::pow (fracf (p.seed * 17.3f), 1.6f);     // 0..1, biased to a dense core
+            const float rad = (0.12f + r0 * 0.88f) * 0.6f * pulse + p.energy * 0.55f;  // + per-band scatter
+            px3 = p.sx * rad; py3 = p.sy * rad; pz3 = p.sz * rad;
+        }
+        else                  // Ring / Nebula: base shape scaled by energy
+        {
+            const float rad = (mode == 1) ? (1.0f + p.energy * 0.30f) : (1.0f + p.energy * 0.12f);
             px3 = p.sx * rad; py3 = p.sy * rad; pz3 = p.sz * rad;
         }
 
