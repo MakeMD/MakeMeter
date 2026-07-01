@@ -72,7 +72,7 @@ private:
     void respawn (int index, const VizFrame&);          // GL thread: reseed a dead particle by mode
 
     // CPU-simulated particle pool (uploaded to a VBO each frame). One engine, four modes.
-    static constexpr int kParticleCount = 16384;
+    static constexpr int kParticleCount = 24576;
     struct Particle { float x = 0, y = 0, life = 0, ilife = 1, seed = 0, energy = 0,
                             disp = 0, sx = 0, sy = 0, sz = 0; int band = 0; };  // sx/sy/sz: 3D base
     std::vector<Particle> pool;

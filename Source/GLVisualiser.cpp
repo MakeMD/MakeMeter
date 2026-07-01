@@ -242,28 +242,38 @@ void GLVisualiser::updateParticles (float dt, const VizFrame& f)
         p.energy += (targetE - p.energy) * juce::jmin (1.0f, dt * 6.0f);
 
         // --- mode-specific 3D position ---
-        float px3, py3, pz3;
-        if (mode == 2) // Helix: vertical DNA — two spiralling backbones + base-pair rungs
+        float px3, py3, pz3, bright = 1.0f;
+        if (mode == 2) // Helix: dense vertical DNA — thick bead backbones + chunky rungs + drifting dust
         {
-            const float H = 0.92f, R = 0.42f, turns = 3.0f;
-            const float jit = (fracf (p.seed * 91.7f) - 0.5f) * 0.05f;   // backbone tube thickness
-            if (p.seed < 0.30f)   // base-pair rung: a bar across the two strands at one level
+            const float H = 0.95f, R = 0.40f, turns = 3.0f, tubeR = 0.085f;
+            if (p.seed < 0.12f)        // dust: beads that came off the helix and drift outward
             {
-                const float u  = (float) (p.band % 12) / 11.0f;         // 12 rungs up the axis
-                const float a0 = u * turns * kTwoPi;
-                const float s  = fracf (p.seed * 43.0f);                // position along the rung
-                const float x0 = std::cos (a0) * R, z0 = std::sin (a0) * R;
-                px3 = x0 - 2.0f * x0 * s;                                // lerp strand0 -> strand1 (=-x0)
-                pz3 = z0 - 2.0f * z0 * s;
-                py3 = (u - 0.5f) * 2.0f * H;
-            }
-            else                  // backbone strand (two, phase PI apart)
-            {
-                const float u = (p.seed - 0.30f) / 0.70f;              // 0..1 along the vertical axis
+                const float u = fracf (p.seed * 7.13f);
                 const float a = u * turns * kTwoPi + (float) (p.band & 1) * 3.14159f;
-                px3 = std::cos (a) * (R + jit);
-                pz3 = std::sin (a) * (R + jit);
-                py3 = (u - 0.5f) * 2.0f * H;
+                const float dist = 0.12f + fracf (p.seed * 23.9f) * 0.4f;
+                const float da   = fracf (p.seed * 51.3f) * kTwoPi;
+                px3 = std::cos (a) * R + std::cos (da) * dist;
+                pz3 = std::sin (a) * R + std::sin (da) * dist;
+                py3 = (u - 0.5f) * 2.0f * H + (fracf (p.seed * 71.1f) - 0.5f) * 0.3f;
+                bright = 0.55f;
+            }
+            else if (p.seed < 0.32f)   // base-pair rung: a chunky bar across the two strands
+            {
+                const float u  = (float) (p.band % 14) / 13.0f;
+                const float a0 = u * turns * kTwoPi;
+                const float s  = fracf (p.seed * 43.0f);
+                const float x0 = std::cos (a0) * R, z0 = std::sin (a0) * R;
+                px3 = x0 - 2.0f * x0 * s + (fracf (p.seed * 13.7f) - 0.5f) * 0.045f;
+                pz3 = z0 - 2.0f * z0 * s + (fracf (p.seed * 61.2f) - 0.5f) * 0.045f;
+                py3 = (u - 0.5f) * 2.0f * H + (fracf (p.seed * 17.4f) - 0.5f) * 0.045f;
+            }
+            else                        // backbone strand: a thick tube of beads (two, phase PI apart)
+            {
+                const float u = fracf (p.seed * 7.13f);
+                const float a = u * turns * kTwoPi + (float) (p.band & 1) * 3.14159f;
+                px3 = std::cos (a) * R + (fracf (p.seed * 13.1f) - 0.5f) * tubeR;
+                pz3 = std::sin (a) * R + (fracf (p.seed * 51.7f) - 0.5f) * tubeR;
+                py3 = (u - 0.5f) * 2.0f * H + (fracf (p.seed * 29.3f) - 0.5f) * tubeR;
             }
         }
         else
@@ -280,7 +290,7 @@ void GLVisualiser::updateParticles (float dt, const VizFrame& f)
         p.x = rx;
         p.y = py3;
         const float depth = 0.4f + 0.6f * (rz * 0.5f + 0.5f);
-        p.disp = juce::jlimit (0.0f, 1.0f, (0.5f + p.energy) * depth);
+        p.disp = juce::jlimit (0.0f, 1.0f, (0.5f + p.energy) * depth * bright);
     }
 }
 
