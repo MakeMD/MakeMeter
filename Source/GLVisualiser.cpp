@@ -187,9 +187,9 @@ void GLVisualiser::respawn (int i, const VizFrame& f)
         p.vx = std::cos (ang) * sp;
         p.vy = std::sin (ang) * sp;
     }
-    else if (mode == 1) // Ring: on the band's circle
+    else if (mode == 1) // Ring: on the band's circle (seed fills the angle continuously between bands)
     {
-        const float ang = kTwoPi * (float) p.band / 200.0f;
+        const float ang = kTwoPi * ((float) p.band + p.seed) / 200.0f;
         p.x = std::cos (ang) * 0.28f;
         p.y = std::sin (ang) * 0.28f;
         p.vx = p.vy = 0.0f;
@@ -251,7 +251,7 @@ void GLVisualiser::updateParticles (float dt, const VizFrame& f)
             }
             else if (mode == 1) // Ring: spring to r(band) at a rotating angle
             {
-                const float ang = kTwoPi * (float) p.band / 200.0f + t * 0.6f * (0.5f + rmsN);
+                const float ang = kTwoPi * ((float) p.band + p.seed) / 200.0f + t * 0.6f * (0.5f + rmsN);
                 const float rT  = 0.28f + 0.55f * std::pow (juce::jlimit (0.0f, 1.0f, f.scope[p.band]), 0.6f);
                 p.vx += (std::cos (ang) * rT - p.x) * 4.0f * dt;
                 p.vy += (std::sin (ang) * rT - p.y) * 4.0f * dt;
@@ -308,8 +308,13 @@ void GLVisualiser::renderOpenGL()
     if (snapshot.read (f)) lastFrame = f; else f = lastFrame;
 
     const auto scale = (float) context.getRenderingScale();
-    const int w = juce::roundToInt (getWidth()  * scale);
+    const int w = juce::roundToInt (getWidth()  * scale);   // physical (screen) px
     const int h = juce::roundToInt (getHeight() * scale);
+    // Supersample the scene + bloom FBOs, then downsample at composite -> anti-aliased, crisp sprites.
+    float ss = juce::jmin (1.75f, 4000.0f / (float) juce::jmax (1, juce::jmax (w, h)));
+    ss = juce::jmax (1.0f, ss);
+    const int fw = juce::roundToInt (w * ss);
+    const int fh = juce::roundToInt (h * ss);
 
     if (w <= 0 || h <= 0 || ! shadersOk.load (std::memory_order_acquire) || particleProg == nullptr)
     {
@@ -320,7 +325,7 @@ void GLVisualiser::renderOpenGL()
         return;
     }
 
-    if (! ensureFbos (w, h))
+    if (! ensureFbos (fw, fh))
     {
         // FBO allocation failed (e.g. size > GL_MAX_TEXTURE_SIZE, unsupported format).
         // Drop out of the GL branch so the grace window flips glFailed -> CPU drawScope.
@@ -356,7 +361,7 @@ void GLVisualiser::renderOpenGL()
 
     // ---- Pass 1: particles -> sceneFbo (pure light on black) ----
     sceneFbo.makeCurrentRenderingTarget();
-    glViewport (0, 0, w, h);
+    glViewport (0, 0, fw, fh);
     glClearColor (0.0f, 0.0f, 0.0f, 1.0f);
     glClear (GL_COLOR_BUFFER_BIT);
 
@@ -372,7 +377,7 @@ void GLVisualiser::renderOpenGL()
     const float fit = 0.66f;
     const float asp = (float) w / (float) h;
     particleProg->setUniform ("uAspect", asp >= 1.0f ? fit / asp : fit, asp >= 1.0f ? fit : fit * asp);
-    particleProg->setUniform ("uScale", scale * (float) getHeight() / 700.0f);
+    particleProg->setUniform ("uScale", scale * ss * (float) getHeight() / 700.0f);
     particleProg->setUniform ("uPulse", 0.9f + f.rmsN * 0.25f);
     particleProg->setUniform ("uColParticle", f.colP[0], f.colP[1], f.colP[2]);
     particleProg->setUniform ("uColCore", f.colC[0], f.colC[1], f.colC[2]);
@@ -392,8 +397,8 @@ void GLVisualiser::renderOpenGL()
     glBindBuffer (GL_ARRAY_BUFFER, 0);
     sceneFbo.releaseAsRenderingTarget();
 
-    // ---- Pass 2: bloom (bright -> blurH -> blurV) at half res ----
-    const int bw = juce::jmax (1, w / 2), bh = juce::jmax (1, h / 2);
+    // ---- Pass 2: bloom (bright -> blurH -> blurV) at half of the supersampled res ----
+    const int bw = juce::jmax (1, fw / 2), bh = juce::jmax (1, fh / 2);
     glDisable (GL_BLEND);
 
     bloomFbo0.makeCurrentRenderingTarget();
