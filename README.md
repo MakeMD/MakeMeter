@@ -53,7 +53,7 @@ local model — the audio never leaves your machine.**
 
 ![Settings](docs/settings.png)
 
-GPU particle visualiser (OpenGL, bloom) — the Ring mode:
+GPU particle visualiser (OpenGL, bloom) — the Helix mode:
 
 ![Visualisation](docs/visualisation.png)
 

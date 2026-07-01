@@ -36,7 +36,8 @@ void main()
     vec2 uv = gl_PointCoord * 2.0 - 1.0;
     float r2 = dot (uv, uv);
     if (r2 > 1.0) discard;
-    float a = exp (-r2 * 3.0);
+    // tight bright core + faint halo -> crisp sparkle instead of a soft blob
+    float a = exp (-r2 * 7.0) + exp (-r2 * 2.2) * 0.3;
     frag = vec4 (vCol * a, a);
 }
 )";
@@ -345,7 +346,7 @@ void GLVisualiser::renderOpenGL()
     updateParticles (dt, f);
 
     const int   P      = kParticleCount;
-    const float basePx = (f.mode == 0 ? 13.0f : f.mode == 1 ? 9.0f : f.mode == 2 ? 8.0f : 18.0f);
+    const float basePx = (f.mode == 0 ? 12.0f : f.mode == 1 ? 8.0f : f.mode == 2 ? 7.0f : 11.0f);
     verts.resize ((size_t) P * 4);
     for (int i = 0; i < P; ++i)
     {
@@ -406,7 +407,7 @@ void GLVisualiser::renderOpenGL()
     brightProg->use();
     glActiveTexture (GL_TEXTURE0); glBindTexture (GL_TEXTURE_2D, sceneFbo.getTextureID());
     brightProg->setUniform ("uScene", (GLint) 0);
-    brightProg->setUniform ("uThreshold", 0.50f);
+    brightProg->setUniform ("uThreshold", 0.62f);   // only bright cores bloom, not the whole haze
     drawFullscreen();
     bloomFbo0.releaseAsRenderingTarget();
 
