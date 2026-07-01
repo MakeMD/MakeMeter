@@ -177,7 +177,7 @@ void GLVisualiser::respawn (int i, const VizFrame& f)
     p.life  = 0.2f + rng.nextFloat() * 0.8f;
     p.ilife = 1.0f / 40.0f;
 
-    if (mode == 0) // Orb: a unit direction; the radius is computed per frame (dense reactive cloud)
+    if (mode == 0) // Orb: unit direction; radius per frame. Band mapped by radius: centre=bass, edge=high.
     {
         const float u = rng.nextFloat(), v = rng.nextFloat();
         const float z = 2.0f * u - 1.0f;
@@ -186,6 +186,8 @@ void GLVisualiser::respawn (int i, const VizFrame& f)
         p.sx = rr * std::cos (th);
         p.sy = rr * std::sin (th);
         p.sz = z;
+        const float r0 = std::pow (fracf (p.seed * 17.3f), 1.6f);
+        p.band = juce::jlimit (0, 199, (int) (r0 * 199.0f));   // centre -> low freq, edge -> high freq
     }
     else if (mode == 1) // Ring: a thin tilted torus, spun around Y each frame
     {
@@ -224,6 +226,9 @@ void GLVisualiser::updateParticles (float dt, const VizFrame& f)
     // Frame-constant terms hoisted out of the per-particle loop (matters at 16k particles).
     const float yaw = t * (0.18f + rmsN * 0.5f);
     const float cs = std::cos (yaw), sn = std::sin (yaw);
+    // Mid-band average drives the Orb's main pulse (bass sits at the centre, highs at the edges).
+    float midSum = 0.0f; for (int b = 66; b < 150; ++b) midSum += f.scope[b];
+    const float midE = juce::jlimit (0.0f, 1.0f, midSum / 84.0f);
 
     // Shapes are long-lived (stable forms), so a mode switch must re-seed every particle's base
     // now rather than waiting ~40 s for natural respawns.
@@ -278,9 +283,9 @@ void GLVisualiser::updateParticles (float dt, const VizFrame& f)
         }
         else if (mode == 0)   // Orb: small dense cloud that pulses with loudness and scatters on hits
         {
-            const float pulse = 0.5f + rmsN * 0.9f;                       // whole cloud grows when loud
+            const float pulse = 0.5f + midE * 1.3f;                       // MAIN pulse on the mid band
             const float r0 = std::pow (fracf (p.seed * 17.3f), 1.6f);     // 0..1, biased to a dense core
-            const float rad = (0.12f + r0 * 0.88f) * 0.6f * pulse + p.energy * 0.55f;  // + per-band scatter
+            const float rad = (0.12f + r0 * 0.88f) * 0.6f * pulse + p.energy * 0.55f;  // energy = its radial band
             px3 = p.sx * rad; py3 = p.sy * rad; pz3 = p.sz * rad;
         }
         else                  // Ring / Nebula: base shape scaled by energy
