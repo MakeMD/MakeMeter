@@ -221,6 +221,10 @@ void GLVisualiser::updateParticles (float dt, const VizFrame& f)
     const float rmsN   = f.rmsN;
     const float spread = juce::jmap (juce::jlimit (0.0f, 1.0f, (1.0f - f.correlation) * 0.5f), 1.0f, 1.6f);
     const float t      = (float) lastTimeS;
+    // Frame-constant terms hoisted out of the per-particle loop (matters at 16k particles).
+    const float yaw = t * (0.18f + rmsN * 0.5f);
+    const float cs = std::cos (yaw), sn = std::sin (yaw);
+    const float dRing = std::pow (0.80f, dt), dNeb = std::pow (0.90f, dt);
 
     for (int i = 0; i < kParticleCount; ++i)
     {
@@ -236,8 +240,6 @@ void GLVisualiser::updateParticles (float dt, const VizFrame& f)
 
         if (mode == 0) // Orb: rotate the sphere base around Y, project, shade by depth
         {
-            const float yaw = t * (0.18f + rmsN * 0.5f);
-            const float cs = std::cos (yaw), sn = std::sin (yaw);
             const float rx = p.sx * cs + p.sz * sn;
             const float rz = -p.sx * sn + p.sz * cs;
             const float rad = 1.0f + p.energy * 0.22f;              // spectrum-reactive radial push
@@ -258,8 +260,7 @@ void GLVisualiser::updateParticles (float dt, const VizFrame& f)
         }
         else // Ring / Nebula: force-integrated
         {
-            const float damp = (mode == 1 ? 0.80f : 0.90f);
-            const float d = std::pow (damp, dt);
+            const float d = (mode == 1 ? dRing : dNeb);
             p.vx *= d; p.vy *= d;
 
             if (mode == 1) // Ring: spring to r(band) at a rotating angle
@@ -358,7 +359,7 @@ void GLVisualiser::renderOpenGL()
     updateParticles (dt, f);
 
     const int   P      = kParticleCount;
-    const float basePx = (f.mode == 0 ? 6.0f : f.mode == 1 ? 8.0f : f.mode == 2 ? 7.0f : 11.0f);
+    const float basePx = (f.mode == 0 ? 3.5f : f.mode == 1 ? 6.0f : f.mode == 2 ? 5.0f : 8.0f);
     verts.resize ((size_t) P * 4);
     for (int i = 0; i < P; ++i)
     {
