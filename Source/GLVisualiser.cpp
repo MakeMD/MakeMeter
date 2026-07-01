@@ -3,6 +3,7 @@
 
 namespace {
 constexpr float kTwoPi = 6.28318530718f;
+inline float fracf (float v) { return v - std::floor (v); }   // cheap per-particle pseudo-random
 
 // GLSL 1.50 (OpenGL 3.2 core).
 
@@ -224,7 +225,6 @@ void GLVisualiser::updateParticles (float dt, const VizFrame& f)
     // Frame-constant terms hoisted out of the per-particle loop (matters at 16k particles).
     const float yaw = t * (0.18f + rmsN * 0.5f);
     const float cs = std::cos (yaw), sn = std::sin (yaw);
-    const float scroll = t * (0.25f + 0.5f * rmsN);
 
     // Shapes are long-lived (stable forms), so a mode switch must re-seed every particle's base
     // now rather than waiting ~40 s for natural respawns.
@@ -243,14 +243,28 @@ void GLVisualiser::updateParticles (float dt, const VizFrame& f)
 
         // --- mode-specific 3D position ---
         float px3, py3, pz3;
-        if (mode == 2) // Helix: analytic travelling double-helix (two strands), in 3D
+        if (mode == 2) // Helix: vertical DNA — two spiralling backbones + base-pair rungs
         {
-            const float u = p.seed;
-            const float ang = u * kTwoPi * 2.5f + (float) (p.band & 1) * 3.14159f + scroll * kTwoPi;
-            const float amp = 0.45f * (0.5f + 0.7f * p.energy);
-            px3 = (u - 0.5f) * 1.7f;
-            py3 = std::sin (ang) * amp;
-            pz3 = std::cos (ang) * amp;
+            const float H = 0.92f, R = 0.42f, turns = 3.0f;
+            const float jit = (fracf (p.seed * 91.7f) - 0.5f) * 0.05f;   // backbone tube thickness
+            if (p.seed < 0.30f)   // base-pair rung: a bar across the two strands at one level
+            {
+                const float u  = (float) (p.band % 12) / 11.0f;         // 12 rungs up the axis
+                const float a0 = u * turns * kTwoPi;
+                const float s  = fracf (p.seed * 43.0f);                // position along the rung
+                const float x0 = std::cos (a0) * R, z0 = std::sin (a0) * R;
+                px3 = x0 - 2.0f * x0 * s;                                // lerp strand0 -> strand1 (=-x0)
+                pz3 = z0 - 2.0f * z0 * s;
+                py3 = (u - 0.5f) * 2.0f * H;
+            }
+            else                  // backbone strand (two, phase PI apart)
+            {
+                const float u = (p.seed - 0.30f) / 0.70f;              // 0..1 along the vertical axis
+                const float a = u * turns * kTwoPi + (float) (p.band & 1) * 3.14159f;
+                px3 = std::cos (a) * (R + jit);
+                pz3 = std::sin (a) * (R + jit);
+                py3 = (u - 0.5f) * 2.0f * H;
+            }
         }
         else
         {
