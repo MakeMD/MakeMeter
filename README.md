@@ -31,8 +31,10 @@ local model — the audio never leaves your machine.**
 - Smooth curve (Catmull‑Rom), peak‑hold and long‑term average
 - Reference overlay: freeze the current spectrum or load a track; A/B compare
 
-**Visualisation view**
-- Goniometer shapes — Orb / Ring / Helix / Nebula — with six colour themes
+**Visualisation view (GPU)**
+- OpenGL particle visualiser with bloom — four modes (Orb / Ring / Helix / Nebula) driven by the
+  stereo field, level and spectrum, with six colour themes. Falls back to a CPU renderer if
+  OpenGL is unavailable, so the view is never blank.
 
 **AI mix feedback (local)**
 - Sends a measurement snapshot to a local [Ollama](https://ollama.com) server and shows advice
@@ -50,6 +52,10 @@ local model — the audio never leaves your machine.**
 ![Meters view](docs/meters.png)
 
 ![Settings](docs/settings.png)
+
+GPU particle visualiser (OpenGL, bloom) — the Ring mode:
+
+![Visualisation](docs/visualisation.png)
 
 The spectrum curve (rendered from pink noise by `MakeMeterSpec`):
 

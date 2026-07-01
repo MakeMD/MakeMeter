@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.22)
-project(MakeMeter VERSION 1.1.0)
+project(MakeMeter VERSION 1.2.0)
 
 include(FetchContent)
 FetchContent_Declare(JUCE
@@ -23,7 +23,8 @@ juce_add_plugin(MakeMeter
 
 target_sources(MakeMeter PRIVATE
     Source/PluginProcessor.cpp
-    Source/PluginEditor.cpp)
+    Source/PluginEditor.cpp
+    Source/GLVisualiser.cpp)
 
 target_compile_features(MakeMeter PRIVATE cxx_std_17)
 
@@ -39,6 +40,7 @@ target_compile_definitions(MakeMeter PUBLIC
 
 target_link_libraries(MakeMeter
     PRIVATE
+        juce::juce_opengl
         juce::juce_audio_utils
         juce::juce_audio_formats
         juce::juce_dsp

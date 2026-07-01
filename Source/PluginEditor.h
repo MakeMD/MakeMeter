@@ -1,6 +1,7 @@
 #pragma once
 #include <juce_audio_processors/juce_audio_processors.h>
 #include "PluginProcessor.h"
+#include "GLVisualiser.h"
 
 class MakeMeterEditor : public juce::AudioProcessorEditor,
                         private juce::Timer
@@ -101,6 +102,13 @@ private:
 
     juce::Rectangle<int> mainArea, aiArea;
     int lastEpoch = -1;
+
+    // GPU particle visualiser over the Visualisation scope area. Null / not-ready -> CPU drawScope.
+    std::unique_ptr<GLVisualiser> glViz;
+    int  glProbeTicks = 0;      // ticks the GL child has been shown but not yet ready
+    bool glFailed = false;      // GL/shaders unavailable after the grace window -> use CPU path
+    bool glReady() const noexcept { return glViz != nullptr && glViz->isReady(); }
+    static juce::Rectangle<int> vizArea (juce::Rectangle<int> main); // scope sub-rect (shared by resized + draw)
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (MakeMeterEditor)
 };

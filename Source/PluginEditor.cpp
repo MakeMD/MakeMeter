@@ -339,6 +339,9 @@ MakeMeterEditor::MakeMeterEditor (MakeMeterProcessor& p)
         }
     }
 
+    glViz = std::make_unique<GLVisualiser> (proc);
+    addChildComponent (*glViz);   // shown only in the Visualisation view (gated in timerCallback)
+
     applyView();
     setResizable (true, true);
     setResizeLimits (860, 660, 1600, 1100); // min height fits the Settings form without scrolling
@@ -363,6 +366,43 @@ void MakeMeterEditor::timerCallback()
 
     // Run the FFT once per tick (GUI thread) so paint() only reads the cached scope.
     proc.meter.spectrum.render (proc.apvts.getRawParameterValue ("slope")->load());
+
+    // Drive the GPU visualiser: keep it shown while the Visualisation view is front so the GL
+    // context can initialise, then feed it a snapshot. If it never becomes ready within the grace
+    // window, mark GL failed and fall back to the CPU drawScope path (never a black view).
+    if (glViz != nullptr)
+    {
+        const bool wantVis = (view == View::Visualisation && ! settingsOpen);
+        if (wantVis && ! glFailed)
+        {
+            glViz->setActive (true);
+            if (glViz->isReady()) glProbeTicks = 0;
+            else if (++glProbeTicks > 20) { glFailed = true; glViz->setActive (false); }
+        }
+        else
+        {
+            glViz->setActive (false);
+        }
+
+        if (glViz->isReady())
+        {
+            VizFrame vf;
+            const auto& sp = proc.meter.spectrum;
+            for (int i = 0; i < 200; ++i) vf.scope[i] = sp.scope[i];
+            const float rms = proc.meter.rmsDb.load (std::memory_order_relaxed);
+            vf.rmsN        = juce::jlimit (0.0f, 1.0f, (rms + 60.0f) / 60.0f);
+            vf.correlation = proc.meter.correlation.load (std::memory_order_relaxed);
+            vf.mode        = shapeIndex;
+            const auto pc = THEMES[themeIndex].particle;
+            const auto cc = THEMES[themeIndex].core;
+            vf.colP[0] = pc.getFloatRed(); vf.colP[1] = pc.getFloatGreen(); vf.colP[2] = pc.getFloatBlue();
+            vf.colC[0] = cc.getFloatRed(); vf.colC[1] = cc.getFloatGreen(); vf.colC[2] = cc.getFloatBlue();
+            vf.bg[0]   = pc.getFloatRed() * 0.05f; vf.bg[1] = pc.getFloatGreen() * 0.05f;
+            vf.bg[2]   = pc.getFloatBlue() * 0.06f + 0.02f;
+            glViz->pushFrame (vf);
+        }
+    }
+
     repaint();
 }
 
@@ -423,6 +463,13 @@ void MakeMeterEditor::mouseDown (const juce::MouseEvent& e)
     repaint();
 }
 
+juce::Rectangle<int> MakeMeterEditor::vizArea (juce::Rectangle<int> main)
+{
+    main.removeFromBottom (44); // bottom stat strip
+    main.removeFromBottom (28); // shape/theme selector row
+    return main.reduced (10);   // must match drawVisualisation's scope rect
+}
+
 void MakeMeterEditor::resized()
 {
     auto r = getLocalBounds();
@@ -445,6 +492,7 @@ void MakeMeterEditor::resized()
     visTab.setBounds    (tb.removeFromLeft (150));
 
     mainArea = r;
+    if (glViz != nullptr) glViz->setBounds (vizArea (mainArea));
     if (settingsOpen) layoutSettings (mainArea);
 
     // AI panel components
@@ -1049,7 +1097,7 @@ void MakeMeterEditor::drawVisualisation (juce::Graphics& g, juce::Rectangle<int>
 {
     auto strip = r.removeFromBottom (44);
     auto selRow = r.removeFromBottom (28);
-    drawScope (g, r.reduced (10), true);
+    if (! glReady()) drawScope (g, r.reduced (10), true);   // GL child covers this rect when ready
 
     // Two "‹ label ›" arrow-group selectors (shape | theme). Hit-rects stored for mouseDown.
     auto selector = [&] (juce::Rectangle<int> box, const juce::String& label,

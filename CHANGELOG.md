@@ -1,5 +1,17 @@
 # Changelog
 
+## 1.2.0
+
+- GPU visualisation: the Visualisation view is now an OpenGL particle visualiser with bloom —
+  four modes (Orb / Ring / Helix / Nebula) driven by the goniometer, level and spectrum, with
+  six themes. Runs on its own render thread reading lock-free meter data; automatically falls
+  back to the CPU renderer if OpenGL/shaders are unavailable (never a blank view).
+
+## 1.1.0
+
+- Chat language picker: Auto, Ukrainian, and the 10 most-spoken world languages; the AI replies
+  in whichever language is chosen.
+
 ## 1.0.0
 
 First public release.
