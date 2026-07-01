@@ -22,7 +22,9 @@ void main()
     gl_Position  = vec4 (aPos * uAspect * uPulse, 0.0, 1.0);
     gl_PointSize = aSize * uScale * uPulse;
     float e = clamp (aEnergy, 0.0, 1.0);
-    vCol = mix (uColParticle, uColCore, e) * (e * 1.8);   // -> 0 as the particle fades
+    // e*e keeps most particles at the theme colour; the white-ish core only shows on the hottest.
+    // Modest per-particle brightness so dense stacks don't clip G/B to white (theme hue survives).
+    vCol = mix (uColParticle, uColCore, e * e) * (e * 0.9);   // -> 0 as the particle fades
 }
 )";
 
@@ -430,7 +432,7 @@ void GLVisualiser::renderOpenGL()
     glActiveTexture (GL_TEXTURE1); glBindTexture (GL_TEXTURE_2D, bloomFbo0.getTextureID());
     compositeProg->setUniform ("uBloom", (GLint) 1);
     compositeProg->setUniform ("uBloomIntensity", 1.25f);
-    compositeProg->setUniform ("uExposure", 1.15f);
+    compositeProg->setUniform ("uExposure", 0.80f);   // less blow-out -> theme hue survives; bloom carries the glow
     compositeProg->setUniform ("uBg", f.bg[0], f.bg[1], f.bg[2]);
     drawFullscreen();
     glActiveTexture (GL_TEXTURE0);
