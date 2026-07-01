@@ -276,12 +276,11 @@ void GLVisualiser::updateParticles (float dt, const VizFrame& f)
                 py3 = (u - 0.5f) * 2.0f * H + (fracf (p.seed * 29.3f) - 0.5f) * tubeR;
             }
         }
-        else if (mode == 0)   // Orb: wide in silence, CONTRACTS/tightens under the beat (like EchoJay)
+        else if (mode == 0)   // Orb: small dense cloud that pulses with loudness and scatters on hits
         {
-            const float pulse = 0.62f - rmsN * 0.38f;                    // idle wide -> tightens when loud
-            const float r0 = std::pow (fracf (p.seed * 17.3f), 1.6f);    // dense centre
-            const float rad = (0.12f + r0 * 0.88f) * 0.6f
-                              * juce::jmax (0.12f, pulse) * (1.0f - p.energy * 0.4f);  // per-band pull-in
+            const float pulse = 0.5f + rmsN * 0.9f;                       // whole cloud grows when loud
+            const float r0 = std::pow (fracf (p.seed * 17.3f), 1.6f);     // 0..1, biased to a dense core
+            const float rad = (0.12f + r0 * 0.88f) * 0.6f * pulse + p.energy * 0.55f;  // + per-band scatter
             px3 = p.sx * rad; py3 = p.sy * rad; pz3 = p.sz * rad;
         }
         else                  // Ring / Nebula: base shape scaled by energy
