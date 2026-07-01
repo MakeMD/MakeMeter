@@ -9,23 +9,25 @@ inline float fracf (float v) { return v - std::floor (v); }   // cheap per-parti
 
 // --- particle point sprite (additive glow); size + brightness carry the fade ---
 const char* kVert = R"(#version 150 core
-in vec2 aPos;
-in float aEnergy;   // energy * fade -> colour brightness + alpha
-in float aSize;     // device-independent base size
-uniform vec2  uAspect;
+in vec3 aPos;       // 3D position
+in float aEnergy;
+in float aSize;
+uniform mat4  uProj;
+uniform mat4  uMV;
 uniform float uScale;
-uniform float uPulse;
 uniform vec3  uColParticle;
 uniform vec3  uColCore;
 out vec3 vCol;
 out float vAlpha;
 void main()
 {
-    gl_Position  = vec4 (aPos * uAspect * uPulse, 0.0, 1.0);
-    gl_PointSize = aSize * uScale * uPulse;
+    vec4 mv = uMV * vec4 (aPos, 1.0);
+    gl_Position  = uProj * mv;
+    gl_PointSize = aSize * uScale / max (gl_Position.w, 0.1);   // perspective: nearer = bigger
     float e = clamp (aEnergy, 0.0, 1.0);
-    vCol   = mix (uColParticle, uColCore, e * e);        // full-brightness theme colour
-    vAlpha = clamp (0.3 + e * 1.3, 0.0, 1.0);            // opacity from energy
+    vCol   = mix (uColParticle, uColCore, e * e);
+    float depth = clamp (1.0 + (mv.z + 5.0) * 0.5, 0.4, 1.0);   // nearer -> brighter
+    vAlpha = clamp (0.3 + e * 1.3, 0.0, 1.0) * depth;
 }
 )";
 
@@ -222,9 +224,6 @@ void GLVisualiser::updateParticles (float dt, const VizFrame& f)
     const int   mode = juce::jlimit (0, 3, f.mode);
     const float rmsN = f.rmsN;
     const float t    = (float) lastTimeS;
-    // Frame-constant terms hoisted out of the per-particle loop (matters at 16k particles).
-    const float yaw = t * (0.18f + rmsN * 0.5f);
-    const float cs = std::cos (yaw), sn = std::sin (yaw);
     // Mid-band average drives the Orb's main pulse (bass sits at the centre, highs at the edges).
     float midSum = 0.0f; for (int b = 66; b < 150; ++b) midSum += f.scope[b];
     const float midE = juce::jlimit (0.0f, 1.0f, midSum / 84.0f);
@@ -296,13 +295,9 @@ void GLVisualiser::updateParticles (float dt, const VizFrame& f)
             px3 = p.sx * rad; py3 = p.sy * rad; pz3 = p.sz * rad;
         }
 
-        // --- common: rotate around Y, project to 2D, shade by depth (front brighter/larger) ---
-        const float rx = px3 * cs + pz3 * sn;
-        const float rz = -px3 * sn + pz3 * cs;
-        p.x = rx;
-        p.y = py3;
-        const float depth = 0.4f + 0.6f * (rz * 0.5f + 0.5f);
-        p.disp = juce::jlimit (0.0f, 1.0f, (0.5f + p.energy) * depth * bright);
+        // store the raw 3D position; the shader (uMV / uProj) rotates + projects with perspective
+        p.x = px3; p.y = py3; p.z = pz3;
+        p.disp = juce::jlimit (0.0f, 1.0f, (0.4f + p.energy) * bright);
     }
 }
 
@@ -384,14 +379,15 @@ void GLVisualiser::renderOpenGL()
 
     const int   P      = kParticleCount;
     const float basePx = (f.mode == 0 ? 2.2f : f.mode == 1 ? 2.5f : f.mode == 2 ? 2.5f : 2.8f);
-    verts.resize ((size_t) P * 4);
+    verts.resize ((size_t) P * 5);
     for (int i = 0; i < P; ++i)
     {
         const auto& p = pool[(size_t) i];   // all modes are stable 3D forms -> no life-fade
-        verts[(size_t) i * 4 + 0] = p.x;
-        verts[(size_t) i * 4 + 1] = p.y;
-        verts[(size_t) i * 4 + 2] = p.disp;
-        verts[(size_t) i * 4 + 3] = basePx * (0.4f + p.disp);
+        verts[(size_t) i * 5 + 0] = p.x;
+        verts[(size_t) i * 5 + 1] = p.y;
+        verts[(size_t) i * 5 + 2] = p.z;
+        verts[(size_t) i * 5 + 3] = p.disp;
+        verts[(size_t) i * 5 + 4] = basePx * (0.4f + p.disp);
     }
 
     // ---- Pass 1: particles -> sceneFbo (pure light on black) ----
@@ -409,20 +405,26 @@ void GLVisualiser::renderOpenGL()
     glEnable (GL_PROGRAM_POINT_SIZE);
 
     particleProg->use();
-    const float fit = 0.66f;
-    const float asp = (float) w / (float) h;
-    particleProg->setUniform ("uAspect", asp >= 1.0f ? fit / asp : fit, asp >= 1.0f ? fit : fit * asp);
-    particleProg->setUniform ("uScale", scale * ss * (float) getHeight() / 700.0f);
-    particleProg->setUniform ("uPulse", 0.9f + f.rmsN * 0.25f);
+    const float camDist = 5.0f;
+    const float yaw = (float) lastTimeS * (0.18f + f.rmsN * 0.5f);
+    const float aspect = (float) fw / (float) juce::jmax (1, fh);
+    const float hw = 0.7f, hh = hw / juce::jmax (0.001f, aspect);
+    const auto proj = juce::Matrix3D<float>::fromFrustum (-hw, hw, -hh, hh, 2.0f, 20.0f);
+    const float viewVals[16] = { 1,0,0,0,  0,1,0,0,  0,0,1,0,  0,0,-camDist,1 };  // column-major translate
+    const auto mv = juce::Matrix3D<float> (viewVals)
+                  * juce::Matrix3D<float>::rotation (juce::Vector3D<float> (0.0f, yaw, 0.0f));
+    particleProg->setUniformMat4 ("uProj", proj.mat, 1, GL_FALSE);
+    particleProg->setUniformMat4 ("uMV",   mv.mat,   1, GL_FALSE);
+    particleProg->setUniform ("uScale", scale * ss * (float) getHeight() / 700.0f * camDist);
     particleProg->setUniform ("uColParticle", f.colP[0], f.colP[1], f.colP[2]);
     particleProg->setUniform ("uColCore", f.colC[0], f.colC[1], f.colC[2]);
 
-    const int stride = 4 * (int) sizeof (float);
-    glVertexAttribPointer ((GLuint) aPosLoc, 2, GL_FLOAT, GL_FALSE, stride, nullptr);
+    const int stride = 5 * (int) sizeof (float);
+    glVertexAttribPointer ((GLuint) aPosLoc, 3, GL_FLOAT, GL_FALSE, stride, nullptr);
     glEnableVertexAttribArray ((GLuint) aPosLoc);
-    glVertexAttribPointer ((GLuint) aEnergyLoc, 1, GL_FLOAT, GL_FALSE, stride, (const void*) (2 * sizeof (float)));
+    glVertexAttribPointer ((GLuint) aEnergyLoc, 1, GL_FLOAT, GL_FALSE, stride, (const void*) (3 * sizeof (float)));
     glEnableVertexAttribArray ((GLuint) aEnergyLoc);
-    glVertexAttribPointer ((GLuint) aSizeLoc, 1, GL_FLOAT, GL_FALSE, stride, (const void*) (3 * sizeof (float)));
+    glVertexAttribPointer ((GLuint) aSizeLoc, 1, GL_FLOAT, GL_FALSE, stride, (const void*) (4 * sizeof (float)));
     glEnableVertexAttribArray ((GLuint) aSizeLoc);
     glDrawArrays (GL_POINTS, 0, P);
     glDisableVertexAttribArray ((GLuint) aPosLoc);

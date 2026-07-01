@@ -73,8 +73,8 @@ private:
 
     // CPU-simulated particle pool (uploaded to a VBO each frame). One engine, four modes.
     static constexpr int kParticleCount = 24576;
-    struct Particle { float x = 0, y = 0, life = 0, ilife = 1, seed = 0, energy = 0,
-                            disp = 0, sx = 0, sy = 0, sz = 0; int band = 0; };  // sx/sy/sz: 3D base
+    struct Particle { float x = 0, y = 0, z = 0, life = 0, ilife = 1, seed = 0, energy = 0,
+                            disp = 0, sx = 0, sy = 0, sz = 0; int band = 0; };  // x/y/z: 3D pos, sx/sy/sz: base
     std::vector<Particle> pool;
     juce::Random rng;
     double lastTimeS = -1.0;
