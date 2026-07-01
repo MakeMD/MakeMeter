@@ -285,7 +285,10 @@ void GLVisualiser::updateParticles (float dt, const VizFrame& f)
         {
             const float pulse = 0.5f + midE * 1.3f;                       // MAIN pulse on the mid band
             const float r0 = std::pow (fracf (p.seed * 17.3f), 1.6f);     // 0..1, biased to a dense core
-            const float rad = (0.12f + r0 * 0.88f) * 0.6f * pulse + p.energy * 0.55f;  // energy = its radial band
+            // break the clean shell: outer (high-freq) particles wander off the ideal radius, wiggling in time
+            const float jAmt = 0.05f + r0 * 0.22f + p.energy * 0.30f;     // more scatter at the edge / on hits
+            const float jit  = std::sin (p.seed * 197.0f + t * 1.8f) * jAmt;
+            const float rad  = (0.12f + r0 * 0.88f) * 0.6f * pulse + p.energy * 0.55f + jit;
             px3 = p.sx * rad; py3 = p.sy * rad; pz3 = p.sz * rad;
         }
         else                  // Ring / Nebula: base shape scaled by energy
