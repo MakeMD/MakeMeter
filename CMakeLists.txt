@@ -14,6 +14,7 @@ juce_add_plugin(MakeMeter
     PLUGIN_CODE Mkmt
     FORMATS VST3 Standalone
     PRODUCT_NAME "MakeMeter"
+    ICON_BIG "${CMAKE_CURRENT_SOURCE_DIR}/assets/MakeMeter.png"
     IS_SYNTH FALSE
     NEEDS_MIDI_INPUT FALSE
     COPY_PLUGIN_AFTER_BUILD TRUE

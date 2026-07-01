@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="assets/MakeMeter.png" width="128" alt="MakeMeter">
+</p>
+
 # MakeMeter
 
 A Windows VST3 / Standalone audio **metering plugin with local‑AI mix feedback**, built with
@@ -40,6 +44,16 @@ local model — the audio never leaves your machine.**
 **Settings / context**
 - Profile (name, DAWs, experience, monitors, headphones, room, genres, workflow) that tunes the
   AI's advice; scans installed VST3s so it phrases suggestions in tools you actually own
+
+## Screenshots
+
+![Meters view](docs/meters.png)
+
+![Settings](docs/settings.png)
+
+The spectrum curve (rendered from pink noise by `MakeMeterSpec`):
+
+![Spectrum curve](docs/spectrum.png)
 
 ## Build
 
