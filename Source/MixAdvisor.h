@@ -17,7 +17,7 @@ class MixAdvisor
 public:
     juce::String endpoint = "http://localhost:11434/api/generate";
     juce::String model    = "qwen3:14b";
-    juce::String replyLang;   // "" / "Ukrainian" / "English" / "Auto (match input)"
+    juce::String replyLang;   // "" (=Ukrainian) / a language name / "Auto (match input)"
 
     // TextEditor doesn't render Markdown — flatten **bold**, `code`, # headers, * bullets.
     static juce::String stripMarkdown (juce::String t)
@@ -46,9 +46,9 @@ public:
         if (busy.exchange (true)) { onResult (U8 ("Зачекай — попередній запит ще обробляється."), false); return; }
 
         juce::String url = endpoint, mdl = model;
-        juce::String langLine = "Reply in Ukrainian";
-        if      (replyLang.startsWithIgnoreCase ("English")) langLine = "Reply in English";
-        else if (replyLang.startsWithIgnoreCase ("Auto"))    langLine = "Reply in the same language as the QUESTION";
+        juce::String langLine = "Reply in Ukrainian";                 // default when nothing is chosen
+        if      (replyLang.startsWithIgnoreCase ("Auto")) langLine = "Reply in the same language as the QUESTION";
+        else if (replyLang.isNotEmpty())                  langLine = "Reply in " + replyLang;
 
         // ponytail: prompt models the EchoJay assistant behaviour (read meters, never name the
         //           source/channel/genre, plain text, per-genre/channel ranges) — adapted, not copied.

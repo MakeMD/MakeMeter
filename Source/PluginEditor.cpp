@@ -293,7 +293,9 @@ MakeMeterEditor::MakeMeterEditor (MakeMeterProcessor& p)
     endpointEd.onTextChange   = [this] { proc.profileTree().setProperty ("aiEndpoint", endpointEd.getText(), nullptr); proc.syncAdvisorFromProfile(); };
 
     experienceBox.addItemList ({ "Beginner", "Intermediate - 1-3 years", "Advanced - 3-10 years", "Expert - 10+ years" }, 1);
-    chatLangBox.addItemList ({ "Auto (match input)", "Ukrainian", "English" }, 1);
+    chatLangBox.addItemList ({ "Auto (match input)", "Ukrainian", "English", "Chinese (Mandarin)",
+                              "Hindi", "Spanish", "French", "Arabic", "Bengali", "Portuguese",
+                              "Urdu", "Indonesian" }, 1); // Russian intentionally excluded
     experienceBox.setSelectedItemIndex (0, juce::dontSendNotification);
     chatLangBox.setSelectedItemIndex (0, juce::dontSendNotification);
     addAndMakeVisible (experienceBox);
