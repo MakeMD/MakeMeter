@@ -18,28 +18,27 @@ uniform float uPulse;
 uniform vec3  uColParticle;
 uniform vec3  uColCore;
 out vec3 vCol;
+out float vAlpha;
 void main()
 {
     gl_Position  = vec4 (aPos * uAspect * uPulse, 0.0, 1.0);
     gl_PointSize = aSize * uScale * uPulse;
     float e = clamp (aEnergy, 0.0, 1.0);
-    // e*e keeps most particles at the theme colour; the white-ish core only shows on the hottest.
-    // Modest per-particle brightness so dense stacks don't clip G/B to white (theme hue survives).
-    vCol = mix (uColParticle, uColCore, e * e) * (e * 0.9);   // -> 0 as the particle fades
+    vCol   = mix (uColParticle, uColCore, e * e);        // full-brightness theme colour
+    vAlpha = clamp (0.3 + e * 1.3, 0.0, 1.0);            // opacity from energy
 }
 )";
 
 const char* kFrag = R"(#version 150 core
 in vec3 vCol;
+in float vAlpha;
 out vec4 frag;
 void main()
 {
-    vec2 uv = gl_PointCoord * 2.0 - 1.0;
-    float r2 = dot (uv, uv);
-    if (r2 > 1.0) discard;
-    // tight bright core + faint halo -> crisp sparkle instead of a soft blob
-    float a = exp (-r2 * 7.0) + exp (-r2 * 2.2) * 0.3;
-    frag = vec4 (vCol * a, a);
+    // solid disc with a thin soft rim (crisp bead), drawn with normal alpha blending
+    float dist = length (gl_PointCoord - vec2 (0.5));
+    float a = (1.0 - smoothstep (0.35, 0.5, dist)) * vAlpha;
+    frag = vec4 (vCol, a);
 }
 )";
 
@@ -405,7 +404,7 @@ void GLVisualiser::renderOpenGL()
     glBindBuffer (GL_ARRAY_BUFFER, vbo);
     glBufferData (GL_ARRAY_BUFFER, (GLsizeiptr) (verts.size() * sizeof (float)), verts.data(), GL_DYNAMIC_DRAW);
     glEnable (GL_BLEND);
-    glBlendFunc (GL_ONE, GL_ONE);
+    glBlendFunc (GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);   // solid beads (occluding), not additive glow
     glDisable (GL_DEPTH_TEST);
     glEnable (GL_PROGRAM_POINT_SIZE);
 
