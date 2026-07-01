@@ -359,7 +359,7 @@ void GLVisualiser::renderOpenGL()
     updateParticles (dt, f);
 
     const int   P      = kParticleCount;
-    const float basePx = (f.mode == 0 ? 3.5f : f.mode == 1 ? 6.0f : f.mode == 2 ? 5.0f : 8.0f);
+    const float basePx = (f.mode == 0 ? 2.2f : f.mode == 1 ? 4.5f : f.mode == 2 ? 4.0f : 6.0f);
     verts.resize ((size_t) P * 4);
     for (int i = 0; i < P; ++i)
     {
