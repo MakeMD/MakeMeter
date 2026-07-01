@@ -246,18 +246,19 @@ void GLVisualiser::updateParticles (float dt, const VizFrame& f)
         if (mode == 2) // Helix: dense vertical DNA — thick bead backbones + chunky rungs + drifting dust
         {
             const float H = 0.95f, R = 0.40f, turns = 3.0f, tubeR = 0.085f;
-            if (p.seed < 0.12f)        // dust: beads that came off the helix and drift outward
+            if (p.seed < 0.25f)        // dust: a continuous stream of beads dissolving off the helix
             {
                 const float u = fracf (p.seed * 7.13f);
                 const float a = u * turns * kTwoPi + (float) (p.band & 1) * 3.14159f;
-                const float dist = 0.12f + fracf (p.seed * 23.9f) * 0.4f;
+                const float ph   = fracf (p.seed * 5.7f + t * 0.13f);   // travel phase 0..1, loops in time
+                const float dist = ph * (0.35f + fracf (p.seed * 23.9f) * 0.8f);
                 const float da   = fracf (p.seed * 51.3f) * kTwoPi;
                 px3 = std::cos (a) * R + std::cos (da) * dist;
                 pz3 = std::sin (a) * R + std::sin (da) * dist;
-                py3 = (u - 0.5f) * 2.0f * H + (fracf (p.seed * 71.1f) - 0.5f) * 0.3f;
-                bright = 0.55f;
+                py3 = (u - 0.5f) * 2.0f * H + ph * 0.5f + (fracf (p.seed * 71.1f) - 0.5f) * 0.15f;
+                bright = (1.0f - ph * 0.8f) * 0.75f;    // fade as it drifts out
             }
-            else if (p.seed < 0.32f)   // base-pair rung: a chunky bar across the two strands
+            else if (p.seed < 0.42f)   // base-pair rung: a chunky bar across the two strands
             {
                 const float u  = (float) (p.band % 14) / 13.0f;
                 const float a0 = u * turns * kTwoPi;
