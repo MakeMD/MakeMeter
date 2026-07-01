@@ -1005,8 +1005,8 @@ void MakeMeterEditor::drawScope (juce::Graphics& g, juce::Rectangle<int> area, b
     }
 
     // shape 0 (Orb) + goniometer: layered dot cloud. Denser (more opaque) for the goniometer.
-    const float halo = orb ? 2.4f : 2.6f;
-    const float coreR = orb ? 1.0f : 1.2f;
+    const float halo = orb ? 2.4f : 1.5f;
+    const float coreR = orb ? 1.0f : 0.7f;
     const auto haloCol = tint.withAlpha (orb ? 0.16f : 0.28f);
     const auto coreCol = th.core.withAlpha (orb ? 0.35f : 0.85f);
     for (int i = 0; i < N; ++i)
