@@ -13,7 +13,7 @@
 struct VizFrame
 {
     float scope[200] = {};
-    float rmsN = 0.0f, correlation = 0.0f;
+    float rmsN = 0.0f;
     int   mode = 0;                                  // shapeIndex: 0 Orb 1 Ring 2 Helix 3 Nebula
     float colP[3] = { 0.21f, 0.77f, 0.88f };         // particle colour
     float colC[3] = { 1.0f, 1.0f, 1.0f };            // core colour
@@ -73,11 +73,12 @@ private:
 
     // CPU-simulated particle pool (uploaded to a VBO each frame). One engine, four modes.
     static constexpr int kParticleCount = 16384;
-    struct Particle { float x = 0, y = 0, vx = 0, vy = 0, life = 0, ilife = 1, seed = 0, energy = 0,
-                            disp = 0, sx = 0, sy = 0, sz = 0; int band = 0; };  // sx/sy/sz: Orb sphere base
+    struct Particle { float x = 0, y = 0, life = 0, ilife = 1, seed = 0, energy = 0,
+                            disp = 0, sx = 0, sy = 0, sz = 0; int band = 0; };  // sx/sy/sz: 3D base
     std::vector<Particle> pool;
     juce::Random rng;
     double lastTimeS = -1.0;
+    int lastMode = -1;          // re-seed the whole pool when the shape mode changes
 
     MakeMeterProcessor& proc;
     juce::OpenGLContext context;                        // declared early -> torn down after GL members

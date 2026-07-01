@@ -391,7 +391,6 @@ void MakeMeterEditor::timerCallback()
             for (int i = 0; i < 200; ++i) vf.scope[i] = sp.scope[i];
             const float rms = proc.meter.rmsDb.load (std::memory_order_relaxed);
             vf.rmsN        = juce::jlimit (0.0f, 1.0f, (rms + 60.0f) / 60.0f);
-            vf.correlation = proc.meter.correlation.load (std::memory_order_relaxed);
             vf.mode        = shapeIndex;
             const auto pc = THEMES[themeIndex].particle;
             const auto cc = THEMES[themeIndex].core;

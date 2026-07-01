@@ -171,60 +171,64 @@ void GLVisualiser::respawn (int i, const VizFrame& f)
     const int mode = juce::jlimit (0, 3, f.mode);
     p.seed = rng.nextFloat();
     p.band = rng.nextInt (200);
-    const float life = juce::jmap (f.rmsN, 2.5f, 0.9f);   // louder -> shorter life -> more churn
-    p.life  = 1.0f;
-    p.ilife = 1.0f / juce::jmax (0.4f, life);
     p.energy = 0.0f;
+    // Every mode is a stable 3D form: long, staggered life so re-seeds never blink in sync.
+    p.life  = 0.2f + rng.nextFloat() * 0.8f;
+    p.ilife = 1.0f / 40.0f;
 
-    if (mode == 0) // Orb: a fixed point on a unit sphere (rotated + projected each frame)
+    if (mode == 0) // Orb: point on a unit sphere (+ ~6% sparse outer dust)
     {
         const float u = rng.nextFloat(), v = rng.nextFloat();
         const float z = 2.0f * u - 1.0f;
         const float rr = std::sqrt (juce::jmax (0.0f, 1.0f - z * z));
         const float th = kTwoPi * v;
-        // ~6% sit further out as sparse "dust" in the void around the sphere
         const float mag = (rng.nextFloat() < 0.06f) ? (1.35f + rng.nextFloat() * 0.7f) : 1.0f;
         p.sx = rr * std::cos (th) * mag;
         p.sy = rr * std::sin (th) * mag;
         p.sz = z * mag;
-        p.x = p.sx; p.y = p.sy; p.vx = p.vy = 0.0f;
-        // long, staggered life so the sphere is stable and respawns never blink in sync
-        p.life  = 0.2f + rng.nextFloat() * 0.8f;
-        p.ilife = 1.0f / 40.0f;
     }
-    else if (mode == 1) // Ring: on the band's circle (seed fills the angle continuously between bands)
+    else if (mode == 1) // Ring: a thin tilted torus, spun around Y each frame
     {
-        const float ang = kTwoPi * ((float) p.band + p.seed) / 200.0f;
-        p.x = std::cos (ang) * 0.28f;
-        p.y = std::sin (ang) * 0.28f;
-        p.vx = p.vy = 0.0f;
+        const float major = kTwoPi * p.seed;
+        const float R = 0.92f, tube = (rng.nextFloat() - 0.5f) * 0.14f;
+        const float bx = std::cos (major) * R, by = tube, bz = std::sin (major) * R;
+        const float tilt = 1.05f;                       // lean so the ring reads as 3D
+        p.sx = bx;
+        p.sy = by * std::cos (tilt) - bz * std::sin (tilt);
+        p.sz = by * std::sin (tilt) + bz * std::cos (tilt);
     }
-    else if (mode == 2) // Helix: along the width (position is analytic each frame)
+    else if (mode == 2) // Helix: x fixed along the axis; y/z are analytic each frame
     {
-        p.x = (p.seed - 0.5f) * 1.7f;
-        p.y = 0.0f; p.vx = p.vy = 0.0f;
+        p.sx = (p.seed - 0.5f) * 1.7f;
+        p.sy = p.sz = 0.0f;
     }
-    else // Nebula: uniform in a disc
+    else // Nebula: uniform inside a 3D ball -> volumetric cloud
     {
-        const float ang = rng.nextFloat() * kTwoPi;
-        const float r   = std::sqrt (rng.nextFloat()) * 0.6f;
-        p.x = std::cos (ang) * r;
-        p.y = std::sin (ang) * r;
-        p.vx = (rng.nextFloat() - 0.5f) * 0.1f;
-        p.vy = (rng.nextFloat() - 0.5f) * 0.1f;
+        const float u = rng.nextFloat(), v = rng.nextFloat();
+        const float z = 2.0f * u - 1.0f;
+        const float rr = std::sqrt (juce::jmax (0.0f, 1.0f - z * z));
+        const float th = kTwoPi * v;
+        const float rad = std::cbrt (rng.nextFloat()) * 0.9f;   // uniform in volume
+        p.sx = rr * std::cos (th) * rad;
+        p.sy = rr * std::sin (th) * rad;
+        p.sz = z * rad;
     }
+    p.x = p.sx; p.y = p.sy;
 }
 
 void GLVisualiser::updateParticles (float dt, const VizFrame& f)
 {
-    const int   mode   = juce::jlimit (0, 3, f.mode);
-    const float rmsN   = f.rmsN;
-    const float spread = juce::jmap (juce::jlimit (0.0f, 1.0f, (1.0f - f.correlation) * 0.5f), 1.0f, 1.6f);
-    const float t      = (float) lastTimeS;
+    const int   mode = juce::jlimit (0, 3, f.mode);
+    const float rmsN = f.rmsN;
+    const float t    = (float) lastTimeS;
     // Frame-constant terms hoisted out of the per-particle loop (matters at 16k particles).
     const float yaw = t * (0.18f + rmsN * 0.5f);
     const float cs = std::cos (yaw), sn = std::sin (yaw);
-    const float dRing = std::pow (0.80f, dt), dNeb = std::pow (0.90f, dt);
+    const float scroll = t * (0.25f + 0.5f * rmsN);
+
+    // Shapes are long-lived (stable forms), so a mode switch must re-seed every particle's base
+    // now rather than waiting ~40 s for natural respawns.
+    if (mode != lastMode) { for (int i = 0; i < kParticleCount; ++i) respawn (i, f); lastMode = mode; }
 
     for (int i = 0; i < kParticleCount; ++i)
     {
@@ -232,53 +236,37 @@ void GLVisualiser::updateParticles (float dt, const VizFrame& f)
         p.life -= p.ilife * dt;
         if (p.life <= 0.0f) { respawn (i, f); continue; }
 
-        // Local energy target: idle floor keeps a living glow in silence; spectrum band + RMS light it up.
+        // Local energy: idle floor keeps a living glow in silence; spectrum band + RMS light it up.
         const float bandE   = std::pow (juce::jlimit (0.0f, 1.0f, f.scope[p.band]), 0.6f);
         const float targetE = juce::jlimit (0.0f, 1.0f, 0.12f + 0.25f * rmsN + 0.8f * bandE);
         p.energy += (targetE - p.energy) * juce::jmin (1.0f, dt * 6.0f);
-        p.disp = p.energy;   // default display value (drives size + brightness); Orb folds in depth
 
-        if (mode == 0) // Orb: rotate the sphere base around Y, project, shade by depth
+        // --- mode-specific 3D position ---
+        float px3, py3, pz3;
+        if (mode == 2) // Helix: analytic travelling double-helix (two strands), in 3D
         {
-            const float rx = p.sx * cs + p.sz * sn;
-            const float rz = -p.sx * sn + p.sz * cs;
-            const float rad = 1.0f + p.energy * 0.22f;              // spectrum-reactive radial push
-            p.x = rx * rad;
-            p.y = p.sy * rad;
-            const float depth = 0.4f + 0.6f * (rz * 0.5f + 0.5f);  // back .. front
-            p.disp = juce::jlimit (0.0f, 1.0f, (0.5f + p.energy) * depth);
-        }
-        else if (mode == 2) // Helix: analytic travelling double-helix (overwrite position)
-        {
-            // ponytail: Helix rides an analytic curve, it is not force-integrated.
-            const float ribbon = (float) (p.band & 1);
             const float u = p.seed;
-            const float scroll = t * (0.25f + 0.5f * rmsN);
-            const float amp = 0.5f * (0.4f + 0.6f * p.energy);
-            p.x = (u - 0.5f) * 1.7f;
-            p.y = std::sin (u * kTwoPi * 3.0f + ribbon * 3.14159f + scroll * kTwoPi) * amp;
+            const float ang = u * kTwoPi * 2.5f + (float) (p.band & 1) * 3.14159f + scroll * kTwoPi;
+            const float amp = 0.45f * (0.5f + 0.7f * p.energy);
+            px3 = (u - 0.5f) * 1.7f;
+            py3 = std::sin (ang) * amp;
+            pz3 = std::cos (ang) * amp;
         }
-        else // Ring / Nebula: force-integrated
+        else
         {
-            const float d = (mode == 1 ? dRing : dNeb);
-            p.vx *= d; p.vy *= d;
-
-            if (mode == 1) // Ring: spring to r(band) at a rotating angle
-            {
-                const float ang = kTwoPi * ((float) p.band + p.seed) / 200.0f + t * 0.6f * (0.5f + rmsN);
-                const float rT  = 0.28f + 0.55f * std::pow (juce::jlimit (0.0f, 1.0f, f.scope[p.band]), 0.6f);
-                p.vx += (std::cos (ang) * rT - p.x) * 4.0f * dt;
-                p.vy += (std::sin (ang) * rT - p.y) * 4.0f * dt;
-            }
-            else // Nebula: slow curl drift
-            {
-                const float a = p.seed * kTwoPi + t * 0.2f;
-                p.vx += std::cos (a) * 0.15f * dt;
-                p.vy += std::sin (a * 1.3f) * 0.15f * dt;
-            }
-            p.x += p.vx * dt * spread;
-            p.y += p.vy * dt * spread;
+            const float rad = (mode == 0) ? (1.0f + p.energy * 0.22f)    // Orb: breathe
+                            : (mode == 1) ? (1.0f + p.energy * 0.30f)    // Ring: pulse
+                                          : (1.0f + p.energy * 0.12f);   // Nebula
+            px3 = p.sx * rad; py3 = p.sy * rad; pz3 = p.sz * rad;
         }
+
+        // --- common: rotate around Y, project to 2D, shade by depth (front brighter/larger) ---
+        const float rx = px3 * cs + pz3 * sn;
+        const float rz = -px3 * sn + pz3 * cs;
+        p.x = rx;
+        p.y = py3;
+        const float depth = 0.4f + 0.6f * (rz * 0.5f + 0.5f);
+        p.disp = juce::jlimit (0.0f, 1.0f, (0.5f + p.energy) * depth);
     }
 }
 
@@ -359,18 +347,14 @@ void GLVisualiser::renderOpenGL()
     updateParticles (dt, f);
 
     const int   P      = kParticleCount;
-    const float basePx = (f.mode == 0 ? 2.2f : f.mode == 1 ? 4.5f : f.mode == 2 ? 4.0f : 6.0f);
+    const float basePx = (f.mode == 0 ? 2.2f : f.mode == 1 ? 2.5f : f.mode == 2 ? 2.5f : 2.8f);
     verts.resize ((size_t) P * 4);
     for (int i = 0; i < P; ++i)
     {
-        const auto& p = pool[(size_t) i];
-        const float age  = 1.0f - p.life;
-        const float fade = (f.mode == 0) ? 1.0f    // Orb sphere is stable — no life-fade twinkle
-                         : juce::jmin (juce::jlimit (0.0f, 1.0f, age / 0.15f),
-                                       juce::jlimit (0.0f, 1.0f, p.life / 0.30f));
+        const auto& p = pool[(size_t) i];   // all modes are stable 3D forms -> no life-fade
         verts[(size_t) i * 4 + 0] = p.x;
         verts[(size_t) i * 4 + 1] = p.y;
-        verts[(size_t) i * 4 + 2] = p.disp * fade;
+        verts[(size_t) i * 4 + 2] = p.disp;
         verts[(size_t) i * 4 + 3] = basePx * (0.4f + p.disp);
     }
 
