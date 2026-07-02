@@ -285,13 +285,22 @@ void GLVisualiser::updateParticles (float dt, const VizFrame& f)
             const float pulse  = 1.15f - midE * 0.85f;                    // dense core shell contracts inward on the beat
             const float thick  = (fracf (p.seed * 17.3f) - 0.5f) * 0.12f; // thin layer -> dense core, not a filled ball
             const float shellR = pulse + thick;
-            if (p.seed > 0.70f)   // ~30% break off the shell and drift radially outward -> diffuse scattered halo
+            if (p.seed > 0.70f)   // ~30% break off the shell and scatter outward in RANDOM directions -> diffuse halo
             {
                 const float spd   = 0.10f + p.energy * 0.35f + midE * 0.25f;    // fly off faster on the beat
                 const float ph    = fracf (p.seed * 37.1f + t * spd);           // 0..1 travel, loops (invisible at wrap)
                 const float reach = 0.6f + fracf (p.seed * 91.7f) * 1.4f;       // how far this one flies out
-                const float rad   = shellR + ph * reach;
-                px3 = p.sx * rad; py3 = p.sy * rad; pz3 = p.sz * rad;
+                // per-particle random drift direction (hashed), NOT the radial normal -> no rays from centre
+                const float da  = fracf (p.seed * 51.3f) * kTwoPi;
+                const float dcz = fracf (p.seed * 73.9f) * 2.0f - 1.0f;
+                const float dcr = std::sqrt (juce::jmax (0.0f, 1.0f - dcz * dcz));
+                const float dx  = dcr * std::cos (da) + p.sx * 0.6f;            // + slight outward bias so the halo grows outward
+                const float dy  = dcr * std::sin (da) + p.sy * 0.6f;
+                const float dz  = dcz + p.sz * 0.6f;
+                const float dist = ph * reach;
+                px3 = p.sx * shellR + dx * dist;
+                py3 = p.sy * shellR + dy * dist;
+                pz3 = p.sz * shellR + dz * dist;
                 bright = (1.0f - ph) * (0.45f + p.energy * 0.8f);               // fade + thin out with distance
             }
             else                  // dense pulsing shell = the bright core
