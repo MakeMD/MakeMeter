@@ -32,9 +32,9 @@ local model — the audio never leaves your machine.**
 - Reference overlay: freeze the current spectrum or load a track; A/B compare
 
 **Visualisation view (GPU)**
-- OpenGL particle visualiser with bloom — four modes (Orb / Ring / Helix / Nebula) driven by the
-  stereo field, level and spectrum, with six colour themes. Falls back to a CPU renderer if
-  OpenGL is unavailable, so the view is never blank.
+- OpenGL particle visualiser in 3D perspective with bloom — four shapes (Orb / Rhombus / Cube /
+  Nebula) that pulse with the music, driven by the spectrum and level, with six colour themes.
+  Falls back to a simplified CPU renderer if OpenGL is unavailable, so the view is never blank.
 
 **AI mix feedback (local)**
 - Sends a measurement snapshot to a local [Ollama](https://ollama.com) server and shows advice
@@ -53,7 +53,7 @@ local model — the audio never leaves your machine.**
 
 ![Settings](docs/settings.png)
 
-GPU particle visualiser (OpenGL, bloom) — the Orb mode (rotating particle sphere):
+GPU particle visualiser (OpenGL, bloom) — the Orb shape (pulsing particle shell with a scattered halo):
 
 ![Visualisation](docs/visualisation.png)
 

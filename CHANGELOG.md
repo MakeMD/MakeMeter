@@ -2,10 +2,15 @@
 
 ## 1.2.0
 
-- GPU visualisation: the Visualisation view is now an OpenGL particle visualiser with bloom —
-  four modes (Orb / Ring / Helix / Nebula) driven by the goniometer, level and spectrum, with
-  six themes. Runs on its own render thread reading lock-free meter data; automatically falls
-  back to the CPU renderer if OpenGL/shaders are unavailable (never a blank view).
+- GPU visualisation: the Visualisation view is now an OpenGL particle visualiser rendered in
+  true 3D perspective (24k point-sprite beads, supersampled, with bloom). Runs on its own
+  render thread reading lock-free meter data; automatically falls back to the CPU renderer if
+  OpenGL/shaders are unavailable (never a blank view).
+- Four reworked shapes: Orb — a dense particle shell that contracts inward on the beat and
+  sprays a scattered halo off its edges; Rhombus and Cube — static 3D solids that breathe with
+  the pulse; Nebula — a soft random particle cluster. Six colour themes.
+- The beat pulse is driven by a smoothed mid-band envelope (bass lights the bottom of the Orb,
+  highs the top), so shapes breathe with the music instead of snapping to transients.
 
 ## 1.1.0
 

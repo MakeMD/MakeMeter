@@ -114,7 +114,7 @@ std::unique_ptr<juce::OpenGLShaderProgram> makeProg (juce::OpenGLContext& ctx,
 }
 } // namespace
 
-GLVisualiser::GLVisualiser (MakeMeterProcessor& p) : proc (p)
+GLVisualiser::GLVisualiser()
 {
     setInterceptsMouseClicks (false, false);
     setOpaque (true);
@@ -164,6 +164,7 @@ void GLVisualiser::newOpenGLContextCreated()
 
     pool.assign (kParticleCount, Particle{});
     lastTimeS = -1.0;
+    animTime = yawAngle = 0.0f;
     shadersOk.store (true, std::memory_order_release);
 }
 
@@ -174,6 +175,7 @@ void GLVisualiser::respawn (int i, const VizFrame& f)
     p.seed = rng.nextFloat();
     p.band = rng.nextInt (200);
     p.energy = 0.0f;
+    p.phase  = 0.0f;
     // Every mode is a stable 3D form: long, staggered life so re-seeds never blink in sync.
     p.life  = 0.2f + rng.nextFloat() * 0.8f;
     p.ilife = 1.0f / 40.0f;
@@ -228,7 +230,7 @@ void GLVisualiser::updateParticles (float dt, const VizFrame& f)
 {
     const int   mode = juce::jlimit (0, 3, f.mode);
     const float rmsN = f.rmsN;
-    const float t    = (float) lastTimeS;
+    const float t    = animTime;   // GL-thread clock from 0 — see the header note on animation state
     // Mid-band average drives the Orb's main pulse (bass sits at the centre, highs at the edges).
     float midSum = 0.0f; for (int b = 66; b < 150; ++b) midSum += f.scope[b];
     const float midRaw = juce::jlimit (0.0f, 1.0f, midSum / 84.0f);
@@ -261,7 +263,8 @@ void GLVisualiser::updateParticles (float dt, const VizFrame& f)
             if (p.seed > 0.70f)   // ~30% break off the shell and scatter outward in RANDOM directions -> diffuse halo
             {
                 const float spd   = 0.10f + p.energy * 0.35f + midE * 0.25f;    // fly off faster on the beat
-                const float ph    = fracf (p.seed * 37.1f + t * spd);           // 0..1 travel, loops (invisible at wrap)
+                p.phase += spd * dt;                                            // integrate: spd varies per frame
+                const float ph    = fracf (p.seed * 37.1f + p.phase);           // 0..1 travel, loops (invisible at wrap)
                 const float reach = 0.6f + fracf (p.seed * 91.7f) * 1.4f;       // how far this one flies out
                 // per-particle random drift direction (hashed), NOT the radial normal -> no rays from centre
                 const float da  = fracf (p.seed * 51.3f) * kTwoPi;
@@ -373,6 +376,8 @@ void GLVisualiser::renderOpenGL()
     float dt = (lastTimeS < 0.0) ? 0.016f : (float) (now - lastTimeS);
     lastTimeS = now;
     dt = juce::jlimit (0.0f, 0.05f, dt);
+    animTime += dt;
+    yawAngle += (0.18f + f.rmsN * 0.5f) * dt;   // integrate spin speed — never absolute-time * rate
     updateParticles (dt, f);
 
     const int   P      = kParticleCount;
@@ -406,7 +411,7 @@ void GLVisualiser::renderOpenGL()
     const float camDist = 5.0f;
     // Ring (rhombus) and Helix (cube) hold a fixed 3/4 orientation and only pulse; Orb + Nebula rotate.
     const bool  spin  = (f.mode == 0 || f.mode == 3);
-    const float yaw   = spin ? (float) lastTimeS * (0.18f + f.rmsN * 0.5f) : 0.62f;
+    const float yaw   = spin ? yawAngle : 0.62f;
     const float pitch = spin ? 0.0f : 0.38f;
     const float aspect = (float) fw / (float) juce::jmax (1, fh);
     const float hw = 0.7f, hh = hw / juce::jmax (0.001f, aspect);
@@ -475,7 +480,7 @@ void GLVisualiser::renderOpenGL()
     glActiveTexture (GL_TEXTURE1); glBindTexture (GL_TEXTURE_2D, bloomFbo0.getTextureID());
     compositeProg->setUniform ("uBloom", (GLint) 1);
     compositeProg->setUniform ("uBloomIntensity", 1.0f);
-    compositeProg->setUniform ("uExposure", 0.90f);   // crisp dots + subtle glow (не серпанок)
+    compositeProg->setUniform ("uExposure", 0.90f);   // crisp dots + subtle glow (not a haze)
     compositeProg->setUniform ("uBg", f.bg[0], f.bg[1], f.bg[2]);
     drawFullscreen();
     glActiveTexture (GL_TEXTURE0);

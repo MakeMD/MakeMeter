@@ -35,7 +35,7 @@ const VizTheme THEMES[] = {
 };
 constexpr int kNumThemes = (int) (sizeof (THEMES) / sizeof (THEMES[0]));
 
-const char* SHAPE_NAMES[] = { "Orb", "Ring", "Helix", "Nebula" };
+const char* SHAPE_NAMES[] = { "Orb", "Rhombus", "Cube", "Nebula" };
 constexpr int kNumShapes = (int) (sizeof (SHAPE_NAMES) / sizeof (SHAPE_NAMES[0]));
 
 const char* DAW_NAMES[] = { "Logic Pro", "Ableton Live", "FL Studio", "Pro Tools", "Studio One",
@@ -339,7 +339,7 @@ MakeMeterEditor::MakeMeterEditor (MakeMeterProcessor& p)
         }
     }
 
-    glViz = std::make_unique<GLVisualiser> (proc);
+    glViz = std::make_unique<GLVisualiser>();
     addChildComponent (*glViz);   // shown only in the Visualisation view (gated in timerCallback)
 
     applyView();
@@ -382,6 +382,8 @@ void MakeMeterEditor::timerCallback()
         else
         {
             glViz->setActive (false);
+            glProbeTicks = 0;   // grace window is per show attempt: hiding detaches the GL context,
+                                // so leftover ticks must not accumulate across view toggles
         }
 
         if (glViz->isReady())

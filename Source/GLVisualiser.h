@@ -1,38 +1,32 @@
 #pragma once
 #include <juce_opengl/juce_opengl.h>
-#include "PluginProcessor.h"
 #include <atomic>
 #include <cstdint>
 #include <memory>
 #include <vector>
 
-// Snapshot of GUI-thread state handed to the GL render thread. The goniometer ring and scalar
-// meters are already lock-free atomics (read live on the GL thread); only spectrum.scope[] is
-// GUI-written, so it travels here. Colours are resolved from the theme on the GUI thread so the
-// GL thread never touches editor members.
+// Snapshot of GUI-thread state handed to the GL render thread: the spectrum scope, normalised
+// RMS, shape mode and theme colours. Everything the GL thread consumes travels in this POD —
+// it never touches editor or processor members.
 struct VizFrame
 {
     float scope[200] = {};
     float rmsN = 0.0f;
-    int   mode = 0;                                  // shapeIndex: 0 Orb 1 Ring 2 Helix 3 Nebula
+    int   mode = 0;                                  // shapeIndex: 0 Orb 1 Rhombus 2 Cube 3 Nebula
     float colP[3] = { 0.21f, 0.77f, 0.88f };         // particle colour
     float colC[3] = { 1.0f, 1.0f, 1.0f };            // core colour
     float bg[3]   = { 0.04f, 0.047f, 0.063f };       // background
 };
 
-// GPU particle visualiser for the Visualisation view. Renders on its own OpenGL thread, reading
-// live meter atomics + a seqlock snapshot — never touches JUCE components from the GL thread.
-// If GL/shaders are unavailable, isReady() stays false and the editor keeps its CPU drawScope
-// path, so the plugin never ships a black view.
-//
-// ponytail: one shader, one VBO of the goniometer ring for now (Phase 1). Bloom + particle
-//           simulation + shape modes come in later phases; this is the smallest thing that
-//           proves the GL context lifecycle + fallback end-to-end.
+// GPU particle visualiser for the Visualisation view: a CPU-simulated particle pool drawn as
+// 3D-perspective point sprites with a bloom pipeline, on JUCE's OpenGL render thread. Data
+// arrives only via the seqlock snapshot below. If GL/shaders are unavailable, isReady() stays
+// false and the editor keeps its CPU drawScope path, so the plugin never shows a black view.
 class GLVisualiser : public juce::Component,
                      public juce::OpenGLRenderer
 {
 public:
-    explicit GLVisualiser (MakeMeterProcessor&);
+    GLVisualiser();
     ~GLVisualiser() override;
 
     void pushFrame (const VizFrame&) noexcept;       // GUI thread
@@ -51,7 +45,7 @@ private:
     {
         void write (const VizFrame& f) noexcept
         {
-            seq.fetch_add (1, std::memory_order_release);   // -> odd (writing)
+            seq.fetch_add (1, std::memory_order_acq_rel);   // -> odd; acquire half pins the stores below it
             frame = f;
             seq.fetch_add (1, std::memory_order_release);   // -> even (done)
         }
@@ -60,7 +54,8 @@ private:
             const auto s0 = seq.load (std::memory_order_acquire);
             if (s0 & 1u) return false;
             out = frame;
-            return s0 == seq.load (std::memory_order_acquire);
+            std::atomic_thread_fence (std::memory_order_acquire);   // copy must not sink below the check
+            return s0 == seq.load (std::memory_order_relaxed);
         }
         std::atomic<std::uint32_t> seq { 0 };
         VizFrame frame {};
@@ -74,14 +69,18 @@ private:
     // CPU-simulated particle pool (uploaded to a VBO each frame). One engine, four modes.
     static constexpr int kParticleCount = 24576;
     struct Particle { float x = 0, y = 0, z = 0, life = 0, ilife = 1, seed = 0, energy = 0,
-                            disp = 0, sx = 0, sy = 0, sz = 0; int band = 0; };  // x/y/z: 3D pos, sx/sy/sz: base
+                            disp = 0, sx = 0, sy = 0, sz = 0, phase = 0; int band = 0; };  // x/y/z: 3D pos, sx/sy/sz: base
     std::vector<Particle> pool;
     juce::Random rng;
     double lastTimeS = -1.0;
     int lastMode = -1;          // re-seed the whole pool when the shape mode changes
     float pulseEnv = 0.0f;      // smoothed mid-band pulse driver -> controls how fast the shell breathes
+    // Animation state integrates rate*dt per frame. Never multiply an absolute clock by a
+    // time-varying rate: the angle would jump wildly with every rate change at large t, and
+    // (float) casts of an absolute clock lose frame-level precision after ~1.5 days of uptime.
+    float animTime = 0.0f;      // GL-thread animation clock, starts at 0 on context creation
+    float yawAngle = 0.0f;      // accumulated Y rotation for the spinning modes
 
-    MakeMeterProcessor& proc;
     juce::OpenGLContext context;                        // declared early -> torn down after GL members
     Snapshot snapshot;
     std::atomic<bool> shadersOk { false };
