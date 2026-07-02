@@ -79,6 +79,7 @@ private:
     juce::Random rng;
     double lastTimeS = -1.0;
     int lastMode = -1;          // re-seed the whole pool when the shape mode changes
+    float pulseEnv = 0.0f;      // smoothed mid-band pulse driver -> controls how fast the shell breathes
 
     MakeMeterProcessor& proc;
     juce::OpenGLContext context;                        // declared early -> torn down after GL members

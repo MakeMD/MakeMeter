@@ -225,7 +225,10 @@ void GLVisualiser::updateParticles (float dt, const VizFrame& f)
     const float t    = (float) lastTimeS;
     // Mid-band average drives the Orb's main pulse (bass sits at the centre, highs at the edges).
     float midSum = 0.0f; for (int b = 66; b < 150; ++b) midSum += f.scope[b];
-    const float midE = juce::jlimit (0.0f, 1.0f, midSum / 84.0f);
+    const float midRaw = juce::jlimit (0.0f, 1.0f, midSum / 84.0f);
+    // Smooth the pulse driver so the shell breathes at half speed instead of snapping to transients.
+    pulseEnv += (midRaw - pulseEnv) * juce::jmin (1.0f, dt * 3.0f);   // lower rate = slower pulse
+    const float midE = pulseEnv;
 
     // Shapes are long-lived (stable forms), so a mode switch must re-seed every particle's base
     // now rather than waiting ~40 s for natural respawns.
