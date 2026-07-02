@@ -189,31 +189,37 @@ void GLVisualiser::respawn (int i, const VizFrame& f)
         p.sz = st * std::sin (ph);
         p.band = juce::jlimit (0, 199, (int) ((ct * 0.5f + 0.5f) * 199.0f));  // bottom=bass, top=high
     }
-    else if (mode == 1) // Ring: a thin tilted torus, spun around Y each frame
+    else if (mode == 1) // Ring: a 3D rhombus (octahedron surface) -> diamond
     {
-        const float major = kTwoPi * p.seed;
-        const float R = 0.92f, tube = (rng.nextFloat() - 0.5f) * 0.14f;
-        const float bx = std::cos (major) * R, by = tube, bz = std::sin (major) * R;
-        const float tilt = 1.05f;                       // lean so the ring reads as 3D
-        p.sx = bx;
-        p.sy = by * std::cos (tilt) - bz * std::sin (tilt);
-        p.sz = by * std::sin (tilt) + bz * std::cos (tilt);
+        const float x = rng.nextFloat() * 2.0f - 1.0f;
+        const float y = rng.nextFloat() * 2.0f - 1.0f;
+        const float z = rng.nextFloat() * 2.0f - 1.0f;
+        const float s = std::abs (x) + std::abs (y) + std::abs (z);       // project onto |x|+|y|+|z| = R
+        const float inv = (s > 1.0e-4f) ? (0.95f / s) : 0.0f;
+        p.sx = x * inv; p.sy = y * inv; p.sz = z * inv;
     }
-    else if (mode == 2) // Helix: x fixed along the axis; y/z are analytic each frame
+    else if (mode == 2) // Helix slot: a cube (particles spread over the 6 faces)
     {
-        p.sx = (p.seed - 0.5f) * 1.7f;
-        p.sy = p.sz = 0.0f;
+        const int face = rng.nextInt (6);
+        const float a = rng.nextFloat() * 2.0f - 1.0f, b = rng.nextFloat() * 2.0f - 1.0f, S = 0.72f;
+        float x = a, y = b, z = a;
+        switch (face)
+        {
+            case 0:  x =  1.0f; y = a; z = b; break;
+            case 1:  x = -1.0f; y = a; z = b; break;
+            case 2:  y =  1.0f; x = a; z = b; break;
+            case 3:  y = -1.0f; x = a; z = b; break;
+            case 4:  z =  1.0f; x = a; y = b; break;
+            default: z = -1.0f; x = a; y = b; break;
+        }
+        p.sx = x * S; p.sy = y * S; p.sz = z * S;
     }
-    else // Nebula: uniform inside a 3D ball -> volumetric cloud
+    else // Nebula: an absolutely random particle cluster (soft, irregular, no clean edge)
     {
-        const float u = rng.nextFloat(), v = rng.nextFloat();
-        const float z = 2.0f * u - 1.0f;
-        const float rr = std::sqrt (juce::jmax (0.0f, 1.0f - z * z));
-        const float th = kTwoPi * v;
-        const float rad = std::cbrt (rng.nextFloat()) * 0.9f;   // uniform in volume
-        p.sx = rr * std::cos (th) * rad;
-        p.sy = rr * std::sin (th) * rad;
-        p.sz = z * rad;
+        const float gx = rng.nextFloat() + rng.nextFloat() + rng.nextFloat() - 1.5f;   // ~gaussian per axis
+        const float gy = rng.nextFloat() + rng.nextFloat() + rng.nextFloat() - 1.5f;
+        const float gz = rng.nextFloat() + rng.nextFloat() + rng.nextFloat() - 1.5f;
+        p.sx = gx * 0.75f; p.sy = gy * 0.75f; p.sz = gz * 0.75f;
     }
     p.x = p.sx; p.y = p.sy;
 }
@@ -247,43 +253,7 @@ void GLVisualiser::updateParticles (float dt, const VizFrame& f)
 
         // --- mode-specific 3D position ---
         float px3, py3, pz3, bright = 1.0f;
-        if (mode == 2) // Helix: dense vertical DNA — thick bead backbones + chunky rungs + drifting dust
-        {
-            const float H = 0.95f, R = 0.40f, turns = 3.0f, tubeR = 0.085f;
-            if (p.seed < 0.25f)        // dust: a continuous stream of beads dissolving off the helix
-            {
-                const float u = fracf (p.seed * 7.13f);
-                const float a = u * turns * kTwoPi + (float) (p.band & 1) * 3.14159f;
-                const float ph   = fracf (p.seed * 5.7f + t * 0.13f);   // travel phase 0..1, loops in time
-                const float dist = ph * (0.35f + fracf (p.seed * 23.9f) * 0.8f);
-                const float da   = fracf (p.seed * 51.3f) * kTwoPi;
-                px3 = std::cos (a) * R + std::cos (da) * dist;
-                pz3 = std::sin (a) * R + std::sin (da) * dist;
-                py3 = (u - 0.5f) * 2.0f * H + ph * 0.5f + (fracf (p.seed * 71.1f) - 0.5f) * 0.15f;
-                bright = (1.0f - ph * 0.8f) * 0.75f;    // fade as it drifts out
-            }
-            else if (p.seed < 0.42f)   // base-pair rung: a chunky bar across the two strands
-            {
-                const float u  = (float) (p.band % 14) / 13.0f;
-                const float a0 = u * turns * kTwoPi;
-                const float s  = fracf (p.seed * 43.0f);
-                const float x0 = std::cos (a0) * R, z0 = std::sin (a0) * R;
-                px3 = x0 - 2.0f * x0 * s + (fracf (p.seed * 13.7f) - 0.5f) * 0.045f;
-                pz3 = z0 - 2.0f * z0 * s + (fracf (p.seed * 61.2f) - 0.5f) * 0.045f;
-                py3 = (u - 0.5f) * 2.0f * H + (fracf (p.seed * 17.4f) - 0.5f) * 0.045f;
-            }
-            else                        // backbone strand: a thick tube of beads (two, phase PI apart)
-            {
-                const float u = fracf (p.seed * 7.13f);
-                const float a = u * turns * kTwoPi + (float) (p.band & 1) * 3.14159f;
-                px3 = std::cos (a) * R + (fracf (p.seed * 13.1f) - 0.5f) * tubeR;
-                pz3 = std::sin (a) * R + (fracf (p.seed * 51.7f) - 0.5f) * tubeR;
-                py3 = (u - 0.5f) * 2.0f * H + (fracf (p.seed * 29.3f) - 0.5f) * tubeR;
-            }
-            const float hpulse = 1.0f + midE * 0.60f;   // whole helix widens radially on the beat
-            px3 *= hpulse; pz3 *= hpulse;
-        }
-        else if (mode == 0)   // Orb: inward-pulsing dense shell + particles spraying off the edges into a halo
+        if (mode == 0)   // Orb: inward-pulsing dense shell + particles spraying off the edges into a halo
         {
             const float pulse  = 1.15f - midE * 0.85f;                    // dense core shell contracts inward on the beat
             const float thick  = (fracf (p.seed * 17.3f) - 0.5f) * 0.12f; // thin layer -> dense core, not a filled ball
@@ -313,10 +283,13 @@ void GLVisualiser::updateParticles (float dt, const VizFrame& f)
                 px3 = p.sx * rad; py3 = p.sy * rad; pz3 = p.sz * rad;
             }
         }
-        else                  // Ring / Nebula: base shape scaled by energy
+        else                  // Ring rhombus / Helix cube / Nebula cluster: static 3D base scaled by the pulse
         {
-            const float rad = (mode == 1) ? (1.0f + midE * 0.45f + p.energy * 0.40f)
-                                          : (1.0f + midE * 0.30f + p.energy * 0.20f);
+            // crisp geometric shapes (rhombus/cube) keep per-particle energy small so faces stay clean;
+            // the random cluster can smear a little.
+            const float rad = (mode == 1) ? (1.0f + midE * 0.40f + p.energy * 0.15f)   // rhombus breathes
+                            : (mode == 2) ? (1.0f + midE * 0.30f + p.energy * 0.15f)   // cube breathes
+                                          : (1.0f + midE * 0.35f + p.energy * 0.25f);  // random cluster
             px3 = p.sx * rad; py3 = p.sy * rad; pz3 = p.sz * rad;
         }
 
