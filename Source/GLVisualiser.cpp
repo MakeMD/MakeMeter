@@ -280,13 +280,26 @@ void GLVisualiser::updateParticles (float dt, const VizFrame& f)
             const float hpulse = 1.0f + midE * 0.60f;   // whole helix widens radially on the beat
             px3 *= hpulse; pz3 *= hpulse;
         }
-        else if (mode == 0)   // Orb: a thin spherical shell of particles that pulses coherently with the beat
+        else if (mode == 0)   // Orb: inward-pulsing dense shell + particles spraying off the edges into a halo
         {
-            const float pulse  = 1.45f - midE * 1.0f;                     // shell contracts INWARD on the beat
-            const float thick  = (fracf (p.seed * 17.3f) - 0.5f) * 0.12f; // thin layer, not a filled ball -> no noise
-            const float ripple = std::sin (p.seed * 9.0f + t * 1.7f) * 0.05f * (0.6f + p.energy); // gentle organic wobble
-            const float rad    = pulse + thick + ripple;
-            px3 = p.sx * rad; py3 = p.sy * rad; pz3 = p.sz * rad;
+            const float pulse  = 1.15f - midE * 0.85f;                    // dense core shell contracts inward on the beat
+            const float thick  = (fracf (p.seed * 17.3f) - 0.5f) * 0.12f; // thin layer -> dense core, not a filled ball
+            const float shellR = pulse + thick;
+            if (p.seed > 0.70f)   // ~30% break off the shell and drift radially outward -> diffuse scattered halo
+            {
+                const float spd   = 0.10f + p.energy * 0.35f + midE * 0.25f;    // fly off faster on the beat
+                const float ph    = fracf (p.seed * 37.1f + t * spd);           // 0..1 travel, loops (invisible at wrap)
+                const float reach = 0.6f + fracf (p.seed * 91.7f) * 1.4f;       // how far this one flies out
+                const float rad   = shellR + ph * reach;
+                px3 = p.sx * rad; py3 = p.sy * rad; pz3 = p.sz * rad;
+                bright = (1.0f - ph) * (0.45f + p.energy * 0.8f);               // fade + thin out with distance
+            }
+            else                  // dense pulsing shell = the bright core
+            {
+                const float ripple = std::sin (p.seed * 9.0f + t * 1.7f) * 0.05f * (0.6f + p.energy); // organic wobble
+                const float rad    = shellR + ripple;
+                px3 = p.sx * rad; py3 = p.sy * rad; pz3 = p.sz * rad;
+            }
         }
         else                  // Ring / Nebula: base shape scaled by energy
         {
