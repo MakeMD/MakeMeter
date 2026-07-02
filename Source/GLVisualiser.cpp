@@ -278,10 +278,12 @@ void GLVisualiser::updateParticles (float dt, const VizFrame& f)
                 pz3 = std::sin (a) * R + (fracf (p.seed * 51.7f) - 0.5f) * tubeR;
                 py3 = (u - 0.5f) * 2.0f * H + (fracf (p.seed * 29.3f) - 0.5f) * tubeR;
             }
+            const float hpulse = 1.0f + midE * 0.60f;   // whole helix widens radially on the beat
+            px3 *= hpulse; pz3 *= hpulse;
         }
         else if (mode == 0)   // Orb: small dense cloud that pulses with loudness and scatters on hits
         {
-            const float pulse = 0.5f + midE * 1.3f;                       // MAIN pulse on the mid band
+            const float pulse = 0.4f + midE * 2.1f;                       // MAIN pulse on the mid band (deeper swing)
             const float r0 = std::pow (fracf (p.seed * 17.3f), 1.6f);     // 0..1, biased to a dense core
             // break the clean shell: outer (high-freq) particles wander off the ideal radius, wiggling in time
             const float jAmt = 0.05f + r0 * 0.22f + p.energy * 0.30f;     // more scatter at the edge / on hits
@@ -291,7 +293,8 @@ void GLVisualiser::updateParticles (float dt, const VizFrame& f)
         }
         else                  // Ring / Nebula: base shape scaled by energy
         {
-            const float rad = (mode == 1) ? (1.0f + p.energy * 0.30f) : (1.0f + p.energy * 0.12f);
+            const float rad = (mode == 1) ? (1.0f + midE * 0.45f + p.energy * 0.40f)
+                                          : (1.0f + midE * 0.30f + p.energy * 0.20f);
             px3 = p.sx * rad; py3 = p.sy * rad; pz3 = p.sz * rad;
         }
 
