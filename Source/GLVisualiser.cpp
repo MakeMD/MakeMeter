@@ -404,13 +404,16 @@ void GLVisualiser::renderOpenGL()
 
     particleProg->use();
     const float camDist = 5.0f;
-    const float yaw = (float) lastTimeS * (0.18f + f.rmsN * 0.5f);
+    // Ring (rhombus) and Helix (cube) hold a fixed 3/4 orientation and only pulse; Orb + Nebula rotate.
+    const bool  spin  = (f.mode == 0 || f.mode == 3);
+    const float yaw   = spin ? (float) lastTimeS * (0.18f + f.rmsN * 0.5f) : 0.62f;
+    const float pitch = spin ? 0.0f : 0.38f;
     const float aspect = (float) fw / (float) juce::jmax (1, fh);
     const float hw = 0.7f, hh = hw / juce::jmax (0.001f, aspect);
     const auto proj = juce::Matrix3D<float>::fromFrustum (-hw, hw, -hh, hh, 2.0f, 20.0f);
     const float viewVals[16] = { 1,0,0,0,  0,1,0,0,  0,0,1,0,  0,0,-camDist,1 };  // column-major translate
     const auto mv = juce::Matrix3D<float> (viewVals)
-                  * juce::Matrix3D<float>::rotation (juce::Vector3D<float> (0.0f, yaw, 0.0f));
+                  * juce::Matrix3D<float>::rotation (juce::Vector3D<float> (pitch, yaw, 0.0f));
     particleProg->setUniformMat4 ("uProj", proj.mat, 1, GL_FALSE);
     particleProg->setUniformMat4 ("uMV",   mv.mat,   1, GL_FALSE);
     particleProg->setUniform ("uScale", scale * ss * (float) getHeight() / 700.0f * camDist);
