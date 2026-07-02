@@ -282,10 +282,10 @@ void GLVisualiser::updateParticles (float dt, const VizFrame& f)
         }
         else if (mode == 0)   // Orb: a thin spherical shell of particles that pulses coherently with the beat
         {
-            const float pulse  = 0.55f + midE * 1.15f;                    // whole shell breathes together (deep pulse)
+            const float pulse  = 1.45f - midE * 1.0f;                     // shell contracts INWARD on the beat
             const float thick  = (fracf (p.seed * 17.3f) - 0.5f) * 0.12f; // thin layer, not a filled ball -> no noise
             const float ripple = std::sin (p.seed * 9.0f + t * 1.7f) * 0.05f * (0.6f + p.energy); // gentle organic wobble
-            const float rad    = pulse + thick + ripple + p.energy * 0.22f;
+            const float rad    = pulse + thick + ripple;
             px3 = p.sx * rad; py3 = p.sy * rad; pz3 = p.sz * rad;
         }
         else                  // Ring / Nebula: base shape scaled by energy
