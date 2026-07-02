@@ -178,17 +178,16 @@ void GLVisualiser::respawn (int i, const VizFrame& f)
     p.life  = 0.2f + rng.nextFloat() * 0.8f;
     p.ilife = 1.0f / 40.0f;
 
-    if (mode == 0) // Orb: unit direction; radius per frame. Band mapped by radius: centre=bass, edge=high.
+    if (mode == 0) // Orb: unit direction on a sphere -> particles form a thin pulsating shell
     {
         const float u = rng.nextFloat(), v = rng.nextFloat();
-        const float z = 2.0f * u - 1.0f;
-        const float rr = std::sqrt (juce::jmax (0.0f, 1.0f - z * z));
-        const float th = kTwoPi * v;
-        p.sx = rr * std::cos (th);
-        p.sy = rr * std::sin (th);
-        p.sz = z;
-        const float r0 = std::pow (fracf (p.seed * 17.3f), 1.6f);
-        p.band = juce::jlimit (0, 199, (int) (r0 * 199.0f));   // centre -> low freq, edge -> high freq
+        const float ct = 2.0f * u - 1.0f;                       // cos(latitude)
+        const float st = std::sqrt (juce::jmax (0.0f, 1.0f - ct * ct));
+        const float ph = kTwoPi * v;
+        p.sx = st * std::cos (ph);
+        p.sy = ct;                                              // Y = latitude (rotation axis) -> stable poles
+        p.sz = st * std::sin (ph);
+        p.band = juce::jlimit (0, 199, (int) ((ct * 0.5f + 0.5f) * 199.0f));  // bottom=bass, top=high
     }
     else if (mode == 1) // Ring: a thin tilted torus, spun around Y each frame
     {
@@ -281,14 +280,12 @@ void GLVisualiser::updateParticles (float dt, const VizFrame& f)
             const float hpulse = 1.0f + midE * 0.60f;   // whole helix widens radially on the beat
             px3 *= hpulse; pz3 *= hpulse;
         }
-        else if (mode == 0)   // Orb: small dense cloud that pulses with loudness and scatters on hits
+        else if (mode == 0)   // Orb: a thin spherical shell of particles that pulses coherently with the beat
         {
-            const float pulse = 0.4f + midE * 2.1f;                       // MAIN pulse on the mid band (deeper swing)
-            const float r0 = std::pow (fracf (p.seed * 17.3f), 1.6f);     // 0..1, biased to a dense core
-            // break the clean shell: outer (high-freq) particles wander off the ideal radius, wiggling in time
-            const float jAmt = 0.05f + r0 * 0.22f + p.energy * 0.30f;     // more scatter at the edge / on hits
-            const float jit  = std::sin (p.seed * 197.0f + t * 1.8f) * jAmt;
-            const float rad  = (0.12f + r0 * 0.88f) * 0.6f * pulse + p.energy * 0.55f + jit;
+            const float pulse  = 0.55f + midE * 1.15f;                    // whole shell breathes together (deep pulse)
+            const float thick  = (fracf (p.seed * 17.3f) - 0.5f) * 0.12f; // thin layer, not a filled ball -> no noise
+            const float ripple = std::sin (p.seed * 9.0f + t * 1.7f) * 0.05f * (0.6f + p.energy); // gentle organic wobble
+            const float rad    = pulse + thick + ripple + p.energy * 0.22f;
             px3 = p.sx * rad; py3 = p.sy * rad; pz3 = p.sz * rad;
         }
         else                  // Ring / Nebula: base shape scaled by energy
